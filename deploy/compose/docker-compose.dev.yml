@@ -1,0 +1,96 @@
+# =============================================================================
+# DHRUVA — Local development infrastructure
+# Runs ONLY databases/observability; backend + frontend run natively for HMR.
+# Launch: docker compose -f deploy/compose/docker-compose.dev.yml up -d
+# =============================================================================
+
+name: dhruva-dev
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: dhruva-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dhruva
+    ports: ["5432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dhruva"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [dhruva-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: dhruva-redis
+    command: redis-server --appendonly yes
+    ports: ["6379:6379"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [dhruva-net]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: dhruva-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    networks: [dhruva-net]
+
+  envoy:
+    image: envoyproxy/envoy:v1.32-latest
+    container_name: dhruva-envoy
+    volumes:
+      - ../docker/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "8080:8080"     # gRPC-Web listener
+      - "9901:9901"     # Envoy admin
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [dhruva-net]
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dhruva-prometheus
+    volumes:
+      - ../docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports: ["9090:9090"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [dhruva-net]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dhruva-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    networks: [dhruva-net]
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  dhruva-net:
+    driver: bridge

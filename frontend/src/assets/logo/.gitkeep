@@ -1,0 +1,2 @@
+# Drop PNG/SVG export variants from the design package into this folder.
+# The master SVG used by the app is in ../../public/logo.svg.

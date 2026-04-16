@@ -1,0 +1,2 @@
+# Model artifacts (.pkl, .pt, .json) are NOT committed to git.
+# See ../README.md for the registry.json schema and object-storage workflow.

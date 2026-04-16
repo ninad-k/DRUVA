@@ -1,0 +1,9 @@
+# Generate TypeScript gRPC-Web clients from ../proto into src/api/grpc/_generated
+version: v1
+plugins:
+  - plugin: es
+    out: src/api/grpc/_generated
+    opt: target=ts
+  - plugin: connect-es
+    out: src/api/grpc/_generated
+    opt: target=ts

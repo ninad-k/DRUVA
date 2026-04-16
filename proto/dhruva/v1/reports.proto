@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum ReportType {
+  REPORT_TYPE_UNSPECIFIED = 0;
+  STRATEGY_PERFORMANCE = 1;
+  PORTFOLIO_MONTHLY = 2;
+  PORTFOLIO_QUARTERLY = 3;
+  PORTFOLIO_ANNUAL = 4;
+  RISK = 5;
+  TAX_PNL = 6;
+  TRADE_JOURNAL = 7;
+  MULTI_ACCOUNT = 8;
+}
+
+enum ReportFormat {
+  REPORT_FORMAT_UNSPECIFIED = 0;
+  PDF = 1;
+  EXCEL = 2;
+  CSV = 3;
+}
+
+message Report {
+  string id = 1;
+  string user_id = 2;
+  string account_id = 3;
+  string strategy_id = 4;
+  ReportType type = 5;
+  string period = 6;              // "1M","3M","YTD", etc.
+  ReportFormat format = 7;
+  string file_url = 8;
+  google.protobuf.Timestamp generated_at = 9;
+}
+
+message GenerateReportRequest {
+  string account_id = 1;
+  string strategy_id = 2;
+  ReportType type = 3;
+  string period = 4;
+  ReportFormat format = 5;
+}
+
+message ListReportsRequest {
+  string user_id = 1;
+}
+message ListReportsResponse {
+  repeated Report reports = 1;
+}
+
+service ReportService {
+  rpc Generate(GenerateReportRequest) returns (Report);
+  rpc List(ListReportsRequest) returns (ListReportsResponse);
+}

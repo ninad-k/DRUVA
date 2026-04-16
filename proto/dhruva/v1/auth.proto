@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message User {
+  string id = 1;
+  string email = 2;
+  string display_name = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;       // seconds
+  string token_type = 4;      // "Bearer"
+}
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message LogoutRequest {}
+message Empty {}
+message MeRequest {}
+
+service AuthService {
+  rpc Login(LoginRequest) returns (TokenPair);
+  rpc Refresh(RefreshRequest) returns (TokenPair);
+  rpc Logout(LogoutRequest) returns (Empty);
+  rpc Me(MeRequest) returns (User);
+}

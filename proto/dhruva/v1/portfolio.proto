@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "dhruva/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message Position {
+  string account_id = 1;
+  string symbol = 2;
+  Exchange exchange = 3;
+  string quantity = 4;
+  string avg_cost = 5;
+  string current_price = 6;
+  string market_value = 7;
+  string unrealized_pnl = 8;
+  string realized_pnl = 9;
+  string sector = 10;
+  string instrument_type = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message EquityPoint {
+  google.protobuf.Timestamp ts = 1;
+  string equity = 2;             // Decimal string
+  string daily_return = 3;
+}
+
+message Analytics {
+  string sharpe = 1;
+  string sortino = 2;
+  string calmar = 3;
+  string max_drawdown = 4;
+  string var_95 = 5;
+  string cumulative_return = 6;
+  string volatility = 7;
+  int32 trade_count = 8;
+  double win_rate = 9;
+}
+
+message GetPositionsRequest {
+  string account_id = 1;
+}
+message GetPositionsResponse {
+  repeated Position positions = 1;
+}
+
+message GetEquityCurveRequest {
+  string account_id = 1;         // empty = overall (all accounts consolidated)
+  string period = 2;             // "1D","1W","1M","3M","6M","1Y","YTD","ALL"
+}
+message GetEquityCurveResponse {
+  repeated EquityPoint points = 1;
+}
+
+message GetAnalyticsRequest {
+  string account_id = 1;         // empty = overall
+  string period = 2;
+}
+
+service PortfolioService {
+  rpc GetPositions(GetPositionsRequest) returns (GetPositionsResponse);
+  rpc GetEquityCurve(GetEquityCurveRequest) returns (GetEquityCurveResponse);
+  rpc GetAnalytics(GetAnalyticsRequest) returns (Analytics);
+}

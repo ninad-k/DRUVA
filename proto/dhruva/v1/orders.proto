@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "dhruva/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message Order {
+  string id = 1;
+  string account_id = 2;
+  string symbol = 3;
+  Exchange exchange = 4;
+  Side side = 5;
+  OrderType order_type = 6;
+  string quantity = 7;            // Decimal string
+  string price = 8;               // Decimal string; empty for MARKET
+  string trigger_price = 9;       // Decimal string; for SL / SL-M
+  OrderStatus status = 10;
+  string broker_order_id = 11;
+  string filled_quantity = 12;
+  string filled_price = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message PlaceOrderRequest {
+  string account_id = 1;
+  string symbol = 2;
+  Exchange exchange = 3;
+  Side side = 4;
+  OrderType order_type = 5;
+  string quantity = 6;
+  string price = 7;
+  string trigger_price = 8;
+  string tag = 9;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+}
+
+message ModifyOrderRequest {
+  string order_id = 1;
+  string quantity = 2;
+  string price = 3;
+  string trigger_price = 4;
+  OrderType order_type = 5;
+}
+
+message ListOrdersRequest {
+  string account_id = 1;
+  Page page = 2;
+  OrderStatus status_filter = 3; // optional
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  PageInfo page_info = 2;
+}
+
+message Empty {}
+
+service OrderService {
+  rpc PlaceOrder(PlaceOrderRequest) returns (Order);
+  rpc CancelOrder(CancelOrderRequest) returns (Order);
+  rpc ModifyOrder(ModifyOrderRequest) returns (Order);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+}

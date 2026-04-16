@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* DHRUVA theme variables — dark-first, light via `[data-theme='light']` */
+@layer base {
+  :root {
+    /* Dark mode defaults (DHRUVA brand) */
+    --background: 222 20% 7%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 18% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 18% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Amber — pole-star gold */
+    --primary: 38 92% 50%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 19% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 19% 16%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 19% 20%;
+    --input: 217 19% 20%;
+    --ring: 38 92% 50%;
+
+    /* Trading semantic */
+    --gain: 142 71% 45%;
+    --loss: 0 72% 51%;
+
+    --radius: 0.5rem;
+  }
+
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 38 92% 50%;
+
+    --gain: 142 71% 35%;
+    --loss: 0 84% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}

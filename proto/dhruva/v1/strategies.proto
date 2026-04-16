@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "dhruva/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+enum StrategyMode {
+  STRATEGY_MODE_UNSPECIFIED = 0;
+  PAPER = 1;
+  LIVE = 2;
+}
+
+message Strategy {
+  string id = 1;
+  string account_id = 2;
+  string name = 3;
+  string strategy_class = 4;       // dotted path, e.g. "xgboost_signal"
+  string parameters_json = 5;      // JSON
+  bool is_enabled = 6;
+  bool is_ml = 7;
+  string model_version = 8;        // for ML strategies
+  StrategyMode mode = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message CreateStrategyRequest {
+  string account_id = 1;
+  string name = 2;
+  string strategy_class = 3;
+  string parameters_json = 4;
+  bool is_ml = 5;
+  string model_version = 6;
+  StrategyMode mode = 7;
+}
+
+message ListStrategiesRequest {
+  string account_id = 1;
+}
+message ListStrategiesResponse {
+  repeated Strategy strategies = 1;
+}
+
+message ToggleStrategyRequest {
+  string strategy_id = 1;
+  bool enabled = 2;
+}
+
+message BacktestRequest {
+  string strategy_id = 1;
+  google.protobuf.Timestamp from_ts = 2;
+  google.protobuf.Timestamp to_ts = 3;
+  repeated string symbols = 4;
+  string timeframe = 5;
+}
+
+message BacktestResult {
+  string report_id = 1;
+  string metrics_json = 2;        // JSON with Sharpe, Sortino, DD, etc.
+  string equity_curve_json = 3;   // JSON array of {ts, equity}
+  string trade_list_json = 4;     // JSON array of trades
+}
+
+service StrategyService {
+  rpc Create(CreateStrategyRequest) returns (Strategy);
+  rpc List(ListStrategiesRequest) returns (ListStrategiesResponse);
+  rpc Toggle(ToggleStrategyRequest) returns (Strategy);
+  rpc Backtest(BacktestRequest) returns (BacktestResult);
+}

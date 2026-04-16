@@ -1,0 +1,78 @@
+# =============================================================================
+# DHRUVA — Production-style full stack (local prod rehearsal)
+# Uses prebuilt images for backend + frontend plus the same infra.
+# Launch: docker compose --env-file .env -f deploy/compose/docker-compose.prod.yml up -d
+# =============================================================================
+
+name: dhruva-prod
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-dhruva}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+    networks: [dhruva-net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes: [redis_data:/data]
+    networks: [dhruva-net]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks: [dhruva-net]
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: dhruva/backend:${DHRUVA_VERSION:-latest}
+    restart: unless-stopped
+    env_file: ../../backend/.env
+    environment:
+      DHRUVA_ENV: production
+      DHRUVA_DB_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dhruva}
+      DHRUVA_REDIS_URL: redis://redis:6379/0
+      DHRUVA_OTLP_ENDPOINT: http://jaeger:4317
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    networks: [dhruva-net]
+
+  envoy:
+    image: envoyproxy/envoy:v1.32-latest
+    restart: unless-stopped
+    volumes:
+      - ../docker/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on: [backend]
+    networks: [dhruva-net]
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    image: dhruva/frontend:${DHRUVA_VERSION:-latest}
+    restart: unless-stopped
+    depends_on: [backend, envoy]
+    ports: ["80:80"]
+    networks: [dhruva-net]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  dhruva-net:
+    driver: bridge

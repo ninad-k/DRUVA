@@ -1,0 +1,90 @@
+# =============================================================================
+# DHRUVA Backend — Python Runtime Requirements
+# Python: 3.12+
+# Pins: latest stable as of 2026-04 (adjust minor ranges as needed)
+# =============================================================================
+
+# --- Web framework & server -------------------------------------------------
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.32,<0.33
+uvloop>=0.21 ; sys_platform != "win32"
+httptools>=0.6
+
+# --- gRPC -------------------------------------------------------------------
+grpcio>=1.68
+grpcio-tools>=1.68
+grpcio-reflection>=1.68
+grpcio-health-checking>=1.68
+protobuf>=5.28
+
+# --- Validation & settings --------------------------------------------------
+pydantic>=2.9,<3
+pydantic-settings>=2.6
+email-validator>=2.2
+
+# --- Database ---------------------------------------------------------------
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30
+alembic>=1.14
+greenlet>=3.1
+
+# --- Cache ------------------------------------------------------------------
+redis[hiredis]>=5.2
+
+# --- Auth & crypto ----------------------------------------------------------
+pyjwt[crypto]>=2.10
+passlib[bcrypt]>=1.7.4
+argon2-cffi>=23.1
+cryptography>=43
+
+# --- HTTP client ------------------------------------------------------------
+httpx>=0.28
+tenacity>=9.0
+
+# --- Data & indicators ------------------------------------------------------
+numpy>=2.1
+polars>=1.17
+pandas>=2.2
+numba>=0.60
+pandas-ta>=0.3.14b
+scipy>=1.14
+
+# --- Backtesting ------------------------------------------------------------
+vectorbt>=0.26
+
+# --- Machine learning -------------------------------------------------------
+scikit-learn>=1.6
+xgboost>=2.1
+lightgbm>=4.5
+joblib>=1.4
+# torch is optional and heavy — install separately if LSTM/RL is needed:
+# torch>=2.5
+
+# --- Scheduler --------------------------------------------------------------
+apscheduler>=3.10.4
+
+# --- Logging, tracing, metrics ----------------------------------------------
+structlog>=24.4
+python-json-logger>=2.0.7
+opentelemetry-api>=1.28
+opentelemetry-sdk>=1.28
+opentelemetry-instrumentation-fastapi>=0.49b2
+opentelemetry-instrumentation-grpc>=0.49b2
+opentelemetry-instrumentation-sqlalchemy>=0.49b2
+opentelemetry-instrumentation-redis>=0.49b2
+opentelemetry-instrumentation-httpx>=0.49b2
+opentelemetry-exporter-otlp-proto-grpc>=1.28
+prometheus-client>=0.21
+
+# --- Reports ----------------------------------------------------------------
+reportlab>=4.2
+openpyxl>=3.1.5
+
+# --- Notifications ----------------------------------------------------------
+aiosmtplib>=3.0
+jinja2>=3.1
+python-telegram-bot>=21.7
+
+# --- WebSockets -------------------------------------------------------------
+websockets>=13
+

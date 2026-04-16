@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package dhruva.v1;
+
+import "dhruva/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+enum Pattern {
+  PATTERN_UNSPECIFIED = 0;
+  MOMENTUM = 1;
+  MEAN_REVERSION = 2;
+  BREAKOUT = 3;
+  REVERSAL = 4;
+}
+
+message ScanResult {
+  string symbol = 1;
+  Exchange exchange = 2;
+  Pattern pattern = 3;
+  double setup_score = 4;       // 0.0 – 100.0
+  string reason = 5;
+  string last_price = 6;        // Decimal string
+  string change_pct = 7;        // "+1.23" etc.
+  google.protobuf.Timestamp detected_at = 8;
+}
+
+message RunScanRequest {
+  repeated Pattern patterns = 1;
+  double min_score = 2;
+  int32 limit = 3;
+}
+
+message RunScanResponse {
+  repeated ScanResult results = 1;
+}
+
+service ScannerService {
+  rpc Run(RunScanRequest) returns (RunScanResponse);
+}

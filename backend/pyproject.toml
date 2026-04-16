@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dhruva-backend"
+version = "0.1.0"
+description = "DHRUVA — Ultra-fast algo trading & portfolio management platform (Python FastAPI + gRPC backend)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "../LICENSE" }
+authors = [{ name = "DHRUVA Team" }]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+# --- Ruff ------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["app/api/grpc/_generated", "app/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",       # pycodestyle + pyflakes
+    "I",                 # isort
+    "B",                 # bugbear
+    "UP",                # pyupgrade
+    "N",                 # pep8-naming
+    "ASYNC",             # async pitfalls
+    "S",                 # bandit (security)
+    "SIM",               # simplifications
+    "RET",               # return improvements
+]
+ignore = ["S101"]        # allow `assert` in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "N802", "N803"]
+
+# --- MyPy ------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = [
+    "app/api/grpc/_generated/",
+    "app/db/migrations/versions/",
+]
+
+[[tool.mypy.overrides]]
+module = ["vectorbt.*", "pandas_ta.*", "numba.*", "talib.*"]
+ignore_missing_imports = true
+
+# --- Pytest ----------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --cov=app --cov-report=term-missing --cov-report=xml"
+markers = [
+    "unit: fast isolated tests",
+    "integration: tests requiring DB/Redis",
+    "e2e: end-to-end tests",
+    "slow: tests that take > 1s",
+]
+
+# --- Coverage --------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = ["app/api/grpc/_generated/*", "app/db/migrations/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
