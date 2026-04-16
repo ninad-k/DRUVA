@@ -13,11 +13,22 @@ from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.rest.v1 import approvals, auth, instruments, orders, strategies, webhooks
+from app.api.rest.v1 import (
+    approvals,
+    auth,
+    instruments,
+    options,
+    orders,
+    strategies,
+    webhooks,
+    webhooks_extra,
+)
+from app.brokers.factory import BrokerFactory
 from app.cache.client import CacheClient
 from app.config import get_settings
 from app.core.execution.approval_service import ApprovalService
 from app.core.notifications.telegram import TelegramBotListener, TelegramNotifier
+from app.data.streaming import OhlcvWriter, StreamHub, StreamingManager
 from app.db.session import SessionLocal, engine, get_session
 from app.infrastructure.health import check_db, check_redis
 from app.infrastructure.http import close_http_client, get_http_client
@@ -49,6 +60,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     notifier = TelegramNotifier(bot_token=settings.telegram_bot_token, http=http)
     app.state.telegram_notifier = notifier
     app.state.cache = cache
+
+    # ----- streaming bus (in-process pub/sub + OHLCV writer) -------------
+    stream_hub = StreamHub()
+    app.state.stream_hub = stream_hub
+    ohlcv_writer = OhlcvWriter(hub=stream_hub, session_factory=SessionLocal)
+    streaming_manager = StreamingManager(
+        hub=stream_hub,
+        factory=BrokerFactory(http=http, settings=settings, cache=cache),
+        session_factory=SessionLocal,
+    )
+    streaming_tasks = [
+        asyncio.create_task(ohlcv_writer.run(), name="ohlcv_writer"),
+        asyncio.create_task(streaming_manager.run(), name="streaming_manager"),
+    ]
+    app.state.streaming_writer = ohlcv_writer
+    app.state.streaming_manager = streaming_manager
 
     # ----- scheduler + jobs ----------------------------------------------
     scheduler = get_scheduler()
@@ -96,6 +123,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         listener = app.state.telegram_listener
         await listener.stop()
         listener_task.cancel()
+
+    # Streaming bus shutdown
+    await ohlcv_writer.stop()
+    await streaming_manager.stop()
+    for task in streaming_tasks:
+        task.cancel()
+    await asyncio.gather(*streaming_tasks, return_exceptions=True)
+
     stop_scheduler()
     await close_http_client()
     await close_redis()
@@ -177,10 +212,49 @@ def create_app() -> FastAPI:
     app.include_router(approvals.router, prefix="/api/v1/approvals", tags=["approvals"])
     app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])
     app.include_router(instruments.router, prefix="/api/v1", tags=["instruments"])
+    app.include_router(options.router, prefix="/api/v1", tags=["options"])
     app.include_router(webhooks.router_chartink, prefix="/api/v1/webhooks/chartink", tags=["webhooks"])
     app.include_router(webhooks.router_tradingview, prefix="/api/v1/webhooks/tradingview", tags=["webhooks"])
+    app.include_router(webhooks_extra.router_amibroker, prefix="/api/v1/webhooks/amibroker", tags=["webhooks"])
+    app.include_router(webhooks_extra.router_metatrader, prefix="/api/v1/webhooks/metatrader", tags=["webhooks"])
+    app.include_router(webhooks_extra.router_gocharting, prefix="/api/v1/webhooks/gocharting", tags=["webhooks"])
+    app.include_router(webhooks_extra.router_n8n, prefix="/api/v1/webhooks/n8n", tags=["webhooks"])
     app.include_router(webhooks.router_sources, prefix="/api/v1/webhook-sources", tags=["webhooks"])
     app.include_router(webhooks.router_notifications, prefix="/api/v1/notifications", tags=["notifications"])
+
+    # Outbound market-data WebSocket. The stream_hub is created in the lifespan,
+    # so the handler resolves it from app.state at connection time rather than
+    # binding at module import.
+    from fastapi import WebSocket
+
+    from app.api.websocket.streaming import _pump, _safe_parse
+
+    @app.websocket("/ws/market")
+    async def market_ws(ws: WebSocket) -> None:
+        await ws.accept()
+        hub = app.state.stream_hub
+        tasks: dict[str, asyncio.Task] = {}
+        try:
+            while True:
+                raw = await ws.receive_text()
+                msg = _safe_parse(raw)
+                if not msg:
+                    continue
+                action = msg.get("action")
+                channel = msg.get("channel")
+                if not isinstance(channel, str):
+                    continue
+                if action == "subscribe" and channel not in tasks:
+                    tasks[channel] = asyncio.create_task(_pump(ws, hub, channel))
+                elif action == "unsubscribe" and channel in tasks:
+                    tasks[channel].cancel()
+                    del tasks[channel]
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            for t in tasks.values():
+                t.cancel()
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
 
     FastAPIInstrumentor.instrument_app(app)
     SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import httpx
 
+from app.brokers.alice_blue import AliceBlueAdapter
+from app.brokers.angel_one import AngelOneAdapter
 from app.brokers.base import BrokerAdapter, BrokerCredentials
 from app.brokers.dhan import DhanAdapter
 from app.brokers.five_paisa import FivePaisaAdapter
 from app.brokers.fyers import FyersAdapter
+from app.brokers.kotak_neo import KotakNeoAdapter
 from app.brokers.latency_wrapper import LatencyRecorder, LatencyRecordingAdapter
 from app.brokers.paper import PaperBroker
+from app.brokers.shoonya import ShoonyaAdapter
 from app.brokers.upstox import UpstoxAdapter
 from app.brokers.zerodha import ZerodhaAdapter
 from app.cache.client import CacheClient
@@ -28,6 +32,12 @@ class BrokerFactory:
             "dhan": DhanAdapter,
             "fyers": FyersAdapter,
             "five_paisa": FivePaisaAdapter,
+            "alice_blue": AliceBlueAdapter,
+            "angel_one": AngelOneAdapter,
+            "kotak_neo": KotakNeoAdapter,
+            "shoonya": ShoonyaAdapter,
+            "flattrade": ShoonyaAdapter,  # NorenAPI clone
+            "finvasia": ShoonyaAdapter,   # NorenAPI clone
             "paper": PaperBroker,
         }
 

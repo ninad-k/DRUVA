@@ -1,0 +1,61 @@
+# Multi-language SDK generation from proto/.
+#
+# Run from the repo root with:
+#   cd sdks && buf generate ../proto
+#
+# Output trees:
+#   python/    Python clients (`pip install -e python/`)
+#   typescript/  TS Connect clients (publishable to npm)
+#   java/      Java/gRPC stubs (Maven/Gradle)
+#   go/        Go gRPC clients
+#   rust/      Rust tonic clients
+#   csharp/    .NET clients (NuGet-publishable)
+#
+# CI builds and publishes per-language packages on every tag.
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: github.com/ninad-k/DRUVA/sdks/go
+plugins:
+  # ---- Python ----
+  - plugin: python
+    out: python/dhruva
+  - plugin: python_grpc
+    out: python/dhruva
+  - plugin: pyi
+    out: python/dhruva
+
+  # ---- TypeScript (Connect-Web; same generator the frontend uses) ----
+  - plugin: es
+    out: typescript/src/_generated
+    opt: target=ts
+  - plugin: connect-es
+    out: typescript/src/_generated
+    opt: target=ts
+
+  # ---- Go ----
+  - plugin: go
+    out: go
+    opt: paths=source_relative
+  - plugin: go-grpc
+    out: go
+    opt: paths=source_relative,require_unimplemented_servers=false
+
+  # ---- Java ----
+  - plugin: java
+    out: java/src/main/java
+  - plugin: grpc-java
+    out: java/src/main/java
+
+  # ---- C# / .NET ----
+  - plugin: csharp
+    out: csharp/src
+  - plugin: grpc-csharp
+    out: csharp/src
+
+  # ---- Rust (tonic) ----
+  - plugin: prost
+    out: rust/src/_generated
+  - plugin: tonic
+    out: rust/src/_generated

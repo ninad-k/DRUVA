@@ -85,6 +85,24 @@ services:
     ports: ["3000:3000"]
     networks: [dhruva-net]
 
+  # Cloudflared tunnel — exposes the local backend (port 8000) to a public
+  # https://<random>.trycloudflare.com URL so you can receive ChartInk /
+  # TradingView / etc. webhooks without DNS or port-forwarding.
+  #
+  # Profile-gated so it only starts when you ask for it:
+  #   docker compose -f deploy/compose/docker-compose.dev.yml --profile tunnel up -d cloudflared
+  #
+  # Watch the logs to grab the public URL:
+  #   docker logs -f dhruva-cloudflared
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: dhruva-cloudflared
+    command: tunnel --no-autoupdate --url http://host.docker.internal:8000
+    profiles: [tunnel]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [dhruva-net]
+
 volumes:
   postgres_data:
   redis_data:

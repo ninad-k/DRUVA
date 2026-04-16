@@ -74,6 +74,9 @@ class WebhookSourceType(str, enum.Enum):
     CHARTINK = "chartink"
     TRADINGVIEW = "tradingview"
     GOCHARTING = "gocharting"
+    AMIBROKER = "amibroker"
+    METATRADER = "metatrader"
+    N8N = "n8n"
 
 
 class WebhookEventStatus(str, enum.Enum):
