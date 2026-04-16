@@ -1,0 +1,118 @@
+# .NET
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.userprefs
+*.suo
+*.sln.docstates
+*.config
+launchSettings.json
+appsettings.Development.json
+appsettings.Production.json
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# Entity Framework
+migrations/
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.angular/
+
+# Angular
+.angular/cache/
+angular.json.bak
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Redis
+dump.rdb
+
+# PostgreSQL
+postgres_data/
+
+# RabbitMQ
+rabbitmq_data/
+
+# Jaeger
+jaeger_data/
+
+# Reports
+reports/
+*.pdf
+*.xlsx
+
+# Certificates
+*.pfx
+*.pem
+*.key
+
+# Docker
+.dockerignore
+
+# CI/CD
+.github/workflows/*.bak
+
+# Package managers
+package-lock.json
+yarn.lock
+
+# Misc
+.classpath
+.project
+.settings/
+.c9/
+*.launch
+.scala_dependencies
+.worksheet
