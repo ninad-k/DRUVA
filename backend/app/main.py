@@ -14,12 +14,19 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.rest.v1 import (
+    advisor,
     approvals,
     auth,
+    fundamentals,
+    goals,
     instruments,
+    market_cycle,
     options,
     orders,
+    scan_results,
+    scanners,
     strategies,
+    watchlists,
     webhooks,
     webhooks_extra,
 )
@@ -42,6 +49,7 @@ from app.middleware.correlation_id import CorrelationIdMiddleware
 from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.core.scanner.registry import import_scanners
 from app.strategies.registry import import_strategies
 
 logger = get_logger(__name__)
@@ -52,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("dhruva.startup", env=settings.env, version=settings.service_version)
     import_strategies()
+    import_scanners()
 
     # ----- shared singletons exposed via lifespan attrs -------------------
     http = await _ensure_http_singleton()
@@ -213,6 +222,13 @@ def create_app() -> FastAPI:
     app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])
     app.include_router(instruments.router, prefix="/api/v1", tags=["instruments"])
     app.include_router(options.router, prefix="/api/v1", tags=["options"])
+    app.include_router(advisor.router, prefix="/api/v1/advisor", tags=["advisor"])
+    app.include_router(scanners.router, prefix="/api/v1/scanners", tags=["scanners"])
+    app.include_router(scan_results.router, prefix="/api/v1/scan-results", tags=["scanners"])
+    app.include_router(fundamentals.router, prefix="/api/v1/fundamentals", tags=["fundamentals"])
+    app.include_router(market_cycle.router, prefix="/api/v1/market-cycle", tags=["market-cycle"])
+    app.include_router(goals.router, prefix="/api/v1/goals", tags=["goals"])
+    app.include_router(watchlists.router, prefix="/api/v1/watchlists", tags=["watchlists"])
     app.include_router(webhooks.router_chartink, prefix="/api/v1/webhooks/chartink", tags=["webhooks"])
     app.include_router(webhooks.router_tradingview, prefix="/api/v1/webhooks/tradingview", tags=["webhooks"])
     app.include_router(webhooks_extra.router_amibroker, prefix="/api/v1/webhooks/amibroker", tags=["webhooks"])

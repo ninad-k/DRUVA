@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.brokers.base import BrokerAdapter
 from app.brokers.factory import BrokerFactory
 from app.cache import keys
+from app.config import get_settings
 from app.db.models.account import Account
 from app.db.models.calendar import MarketHoliday, MarketSession
+from app.db.models.fundamentals import FundamentalSnapshot
 from app.db.models.instrument import Instrument, QtyFreezeLimit
 from app.db.models.position import Position
 from app.infrastructure.logging import get_logger
@@ -173,6 +175,79 @@ class RiskEngine:
             return RiskCheckResult(passed=False, reason="rate_limit")
         return RiskCheckResult(passed=True)
 
+    async def check_max_positions(self, account: Account) -> RiskCheckResult:
+        """Cap at ``settings.max_positions`` distinct equity positions.
+
+        Aligns with the concentrated-portfolio philosophy behind the
+        multibagger scanners (Harsh/Ashwin target ~20 names max).
+        """
+        settings = get_settings()
+        positions = (
+            await self.session.execute(
+                select(Position).where(
+                    Position.account_id == account.id,
+                    Position.quantity != 0,
+                )
+            )
+        ).scalars().all()
+        distinct_symbols = {p.symbol for p in positions}
+        if len(distinct_symbols) >= int(settings.max_positions):
+            return RiskCheckResult(passed=False, reason="max_positions_reached")
+        return RiskCheckResult(passed=True)
+
+    async def check_sector_concentration(
+        self, account: Account, symbol: str, new_qty: Decimal, price: Decimal,
+    ) -> RiskCheckResult:
+        """No single sector may exceed ``settings.sector_concentration_cap_pct``.
+
+        Sector comes from ``FundamentalSnapshot.sector`` (latest row). If no
+        fundamentals are available, the check passes (we don't have signal).
+        """
+        settings = get_settings()
+        cap = Decimal(str(settings.sector_concentration_cap_pct)) / Decimal("100")
+        new_fund = (
+            await self.session.execute(
+                select(FundamentalSnapshot)
+                .where(FundamentalSnapshot.symbol == symbol)
+                .order_by(FundamentalSnapshot.as_of_date.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if new_fund is None or new_fund.sector is None:
+            return RiskCheckResult(passed=True)
+        new_sector = new_fund.sector
+
+        positions = (
+            await self.session.execute(
+                select(Position).where(Position.account_id == account.id)
+            )
+        ).scalars().all()
+        sector_notional = Decimal("0")
+        total_notional = Decimal("0")
+        for p in positions:
+            px = p.current_price or p.avg_cost or Decimal("0")
+            notional = abs(p.quantity) * px
+            total_notional += notional
+            snap = (
+                await self.session.execute(
+                    select(FundamentalSnapshot)
+                    .where(FundamentalSnapshot.symbol == p.symbol)
+                    .order_by(FundamentalSnapshot.as_of_date.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if snap is not None and snap.sector == new_sector:
+                sector_notional += notional
+        new_notional = abs(new_qty) * price
+        proposed_sector = sector_notional + new_notional
+        proposed_total = total_notional + new_notional
+        if proposed_total == 0:
+            return RiskCheckResult(passed=True)
+        ratio = proposed_sector / proposed_total
+        if ratio > cap:
+            return RiskCheckResult(passed=False, reason="sector_concentration_exceeded")
+        return RiskCheckResult(passed=True)
+
     # ------------------------------------------------------------------ orchestrator
 
     async def validate(
@@ -210,6 +285,17 @@ class RiskEngine:
         check_c = await self.check_concentration(account, request.symbol, request.quantity)
         if not check_c.passed:
             return RiskValidationResult(passed=False, reason=check_c.reason)
+
+        # Multibagger additions: max-positions + sector concentration.
+        if request.side == "BUY":
+            check_max_p = await self.check_max_positions(account)
+            if not check_max_p.passed:
+                return RiskValidationResult(passed=False, reason=check_max_p.reason)
+            check_sector = await self.check_sector_concentration(
+                account, request.symbol, request.quantity, request.price or Decimal("0"),
+            )
+            if not check_sector.passed:
+                return RiskValidationResult(passed=False, reason=check_sector.reason)
 
         check_r = await self.check_max_orders_per_minute(account)
         if not check_r.passed:

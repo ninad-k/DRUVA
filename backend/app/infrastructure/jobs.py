@@ -130,7 +130,105 @@ def register_jobs(
         replace_existing=True,
     )
 
-    # 4. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
+    # 4. AI Advisor daily refresh — after NSE close (13:00 UTC = 18:30 IST by default).
+    if settings.advisor_enabled:
+        from app.core.advisor.service import AdvisorService, fallback_llm_from_settings
+        from app.db.models.advisor import AdvisorWatchlist
+
+        async def advisor_job() -> None:
+            async with session_factory() as session:
+                # Run for every user that has an active watchlist entry.
+                user_ids = (
+                    await session.execute(
+                        select(AdvisorWatchlist.user_id)
+                        .where(AdvisorWatchlist.is_active.is_(True))
+                        .distinct()
+                    )
+                ).scalars().all()
+                fallback = fallback_llm_from_settings(settings)
+                for uid in user_ids:
+                    try:
+                        svc = AdvisorService(
+                            session=session, http=http, fallback_llm=fallback,
+                        )
+                        result = await svc.run(user_id=uid)
+                        logger.info(
+                            "scheduler.advisor_run_ok",
+                            user_id=str(uid),
+                            scored=result.scored,
+                            regime=result.regime.value,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "scheduler.advisor_run_failed",
+                            user_id=str(uid),
+                            error=str(exc),
+                        )
+
+        scheduler.add_job(
+            advisor_job,
+            CronTrigger(
+                day_of_week="mon-fri",
+                hour=settings.advisor_refresh_cron_utc_hour,
+                minute=settings.advisor_refresh_cron_utc_minute,
+            ),
+            id="advisor_daily_refresh",
+            replace_existing=True,
+        )
+
+    # 5a. Scanner run-all — post-close daily.
+    if settings.scanner_enabled:
+        from app.core.scanner.runner import ScannerRunner
+
+        async def scanner_job() -> None:
+            async with session_factory() as session:
+                try:
+                    runner = ScannerRunner(session=session)
+                    total = await runner.run_all_enabled()
+                    if total:
+                        logger.info("scheduler.scanner_run_ok", emitted=total)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("scheduler.scanner_run_failed", error=str(exc))
+
+        scheduler.add_job(
+            scanner_job,
+            CronTrigger(
+                day_of_week="mon-fri",
+                hour=settings.scanner_run_cron_utc_hour,
+                minute=settings.scanner_run_cron_utc_minute,
+            ),
+            id="scanner_daily_run",
+            replace_existing=True,
+        )
+
+        # 5b. Fundamentals weekly refresh (Saturday by default).
+        from app.data.fundamentals.refresh_job import FundamentalsRefreshJob
+
+        async def fundamentals_job() -> None:
+            async with session_factory() as session:
+                try:
+                    job = FundamentalsRefreshJob(
+                        session=session, http=http, settings=settings,
+                    )
+                    result = await job.run(limit=500)
+                    logger.info("scheduler.fundamentals_refresh_ok", **result)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "scheduler.fundamentals_refresh_failed", error=str(exc),
+                    )
+
+        scheduler.add_job(
+            fundamentals_job,
+            CronTrigger(
+                day_of_week=settings.fundamentals_refresh_day_of_week,
+                hour=settings.fundamentals_refresh_cron_utc_hour,
+                minute=settings.fundamentals_refresh_cron_utc_minute,
+            ),
+            id="fundamentals_weekly_refresh",
+            replace_existing=True,
+        )
+
+    # 6. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
     if not settings.telegram_bot_token:
         logger.info("scheduler.daily_summary_skipped", reason="no_telegram_token")
         return

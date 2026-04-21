@@ -16,6 +16,9 @@ import { AccountDetailPage } from "@/features/portfolio/AccountDetailPage";
 import { StrategiesListPage } from "@/features/strategies/StrategiesListPage";
 import { StrategyDetailPage } from "@/features/strategies/StrategyDetailPage";
 import { ScannerPage } from "@/features/scanner/ScannerPage";
+import { MultibaggerPage } from "@/features/multibagger/MultibaggerPage";
+import { GoalsPage } from "@/features/goals/GoalsPage";
+import { AdvisorPage } from "@/features/advisor/AdvisorPage";
 import { OptionsPage } from "@/features/options/OptionsPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { AccountsPage } from "@/features/settings/AccountsPage";
@@ -106,6 +109,24 @@ const scannerRoute = createRoute({
   component: ScannerPage,
 });
 
+const multibaggerRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/multibagger",
+  component: MultibaggerPage,
+});
+
+const goalsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/goals",
+  component: GoalsPage,
+});
+
+const advisorRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/advisor",
+  component: AdvisorPage,
+});
+
 const optionsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/options",
@@ -143,6 +164,9 @@ const routeTree = rootRoute.addChildren([
     strategiesRoute,
     strategyDetailRoute,
     scannerRoute,
+    multibaggerRoute,
+    goalsRoute,
+    advisorRoute,
     optionsRoute,
     reportsRoute,
     settingsAccountsRoute,

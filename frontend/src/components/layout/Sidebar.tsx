@@ -1,13 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
+  Brain,
   Briefcase,
   CandlestickChart,
   FileText,
+  Gem,
   LayoutDashboard,
   LineChart,
   Radar,
   Settings,
+  Target,
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -26,6 +29,9 @@ const NAV: NavItem[] = [
   { label: "Portfolio", to: "/portfolio", icon: Briefcase, match: ["/portfolio"] },
   { label: "Strategies", to: "/strategies", icon: LineChart, match: ["/strategies"] },
   { label: "Scanner", to: "/scanner", icon: Radar },
+  { label: "Multibagger", to: "/multibagger", icon: Gem },
+  { label: "Goals", to: "/goals", icon: Target },
+  { label: "AI Advisor", to: "/advisor", icon: Brain },
   { label: "Options", to: "/options", icon: CandlestickChart },
   { label: "Reports", to: "/reports", icon: FileText },
   { label: "Settings", to: "/settings/accounts", icon: Settings, match: ["/settings"] },

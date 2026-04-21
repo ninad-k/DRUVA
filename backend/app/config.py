@@ -79,6 +79,51 @@ class Settings(BaseSettings):
     # --- Execution / approvals ---------------------------------------------
     approval_ttl_minutes: int = 15
 
+    # --- AI Advisor --------------------------------------------------------
+    # Pluggable LLM backend. Default uses a local Ollama server so users can
+    # run gemma/llama/qwen without any cloud key. Switch via env vars:
+    #   DHRUVA_ADVISOR_LLM_PROVIDER=anthropic | openai | ollama | openai_compatible | none
+    advisor_enabled: bool = True
+    advisor_llm_provider: Literal[
+        "none", "anthropic", "openai", "ollama", "openai_compatible"
+    ] = "ollama"
+    advisor_llm_model: str = "gemma3:4b"
+    advisor_llm_base_url: str = "http://localhost:11434"
+    advisor_llm_api_key: str = ""
+    advisor_llm_timeout_s: int = 120
+    advisor_llm_max_tokens: int = 1024
+    advisor_llm_temperature: float = 0.2
+    # Daily refresh time (IST 18:30 = 13:00 UTC — after NSE close).
+    advisor_refresh_cron_utc_hour: int = 13
+    advisor_refresh_cron_utc_minute: int = 0
+    # Risk caps used by the allocator.
+    advisor_max_positions: int = 8
+    advisor_per_position_stop_loss_pct: float = 10.0
+
+    # --- Multibagger scanners / portfolio ----------------------------------
+    scanner_enabled: bool = True
+    scanner_run_cron_utc_hour: int = 13   # 18:30 IST — post NSE close
+    scanner_run_cron_utc_minute: int = 30
+    fundamentals_refresh_cron_utc_hour: int = 20  # Sun 01:30 IST ~= Sat 20:00 UTC
+    fundamentals_refresh_cron_utc_minute: int = 0
+    fundamentals_refresh_day_of_week: str = "sat"
+    fundamentals_max_concurrency: int = 4
+    fundamentals_stale_days: int = 7
+    screener_base_url: str = "https://www.screener.in"
+
+    # Risk caps — extends existing RiskEngine
+    max_positions: int = 20
+    sector_concentration_cap_pct: float = 25.0
+    vcp_hard_stop_pct: float = 4.5
+
+    # Market cycle allocation (% of capital to deploy per regime)
+    market_cycle_bull_pct: float = 90.0
+    market_cycle_neutral_pct: float = 60.0
+    market_cycle_bear_pct: float = 30.0
+
+    # Default per-position allocation cap
+    max_per_position_pct: float = 5.0
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
