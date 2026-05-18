@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import httpx
 
+from app.brokers._rest_helpers import safe_json
 from app.brokers.base import (
     AuthSession,
     BrokerAdapter,
@@ -16,6 +17,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -25,6 +27,7 @@ from app.brokers.base import (
     Quote,
 )
 from app.core.errors import BrokerError
+from app.strategies.base import Candle
 from app.utils.time import utcnow
 
 
@@ -64,7 +67,22 @@ class ZerodhaAdapter(BrokerAdapter):
         return OrderAck(broker_order_id=str(data.get("order_id", "")), status="accepted")
 
     async def modify_order(self, broker_order_id: str, req: OrderModifyRequest) -> OrderAck:
-        raise NotImplementedError("TODO: zerodha modify_order")
+        payload: dict = {}
+        if req.quantity is not None:
+            payload["quantity"] = int(req.quantity)
+        if req.price is not None:
+            payload["price"] = float(req.price)
+        if req.trigger_price is not None:
+            payload["trigger_price"] = float(req.trigger_price)
+        if req.order_type is not None:
+            payload["order_type"] = req.order_type
+        response = await self._http.put(
+            f"{self._base_url}/orders/regular/{broker_order_id}",
+            data=payload,
+            headers=self._headers(),
+        )
+        await safe_json(response, self.broker_id, "modify_order")
+        return OrderAck(broker_order_id=broker_order_id, status="modified")
 
     async def cancel_order(self, broker_order_id: str) -> None:
         response = await self._http.delete(
@@ -95,7 +113,22 @@ class ZerodhaAdapter(BrokerAdapter):
         return out
 
     async def get_holdings(self) -> list[BrokerHolding]:
-        raise NotImplementedError("TODO: zerodha holdings")
+        response = await self._http.get(
+            f"{self._base_url}/portfolio/holdings", headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "holdings")
+        out: list[BrokerHolding] = []
+        for item in data.get("data", []) or []:
+            out.append(
+                BrokerHolding(
+                    symbol=item.get("tradingsymbol", ""),
+                    exchange=item.get("exchange", "NSE"),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    average_price=Decimal(str(item.get("average_price", 0))),
+                    last_price=Decimal(str(item.get("last_price", 0))),
+                )
+            )
+        return out
 
     async def get_margin(self) -> MarginDetails:
         return MarginDetails(available_cash=Decimal("1000000"), used_margin=Decimal("0"), total=Decimal("1000000"))
@@ -111,7 +144,37 @@ class ZerodhaAdapter(BrokerAdapter):
             return BrokerHealth(is_healthy=False, latency_ms=latency_ms, message=str(exc))
 
     async def search_symbols(self, query: str, exchange: str | None = None) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: zerodha search_symbols")
+        # Kite does not have a dedicated search endpoint; we download the full
+        # instruments CSV and filter in-memory by tradingsymbol.
+        response = await self._http.get(
+            f"{self._base_url}/instruments", headers=self._headers()
+        )
+        if response.status_code >= 400:
+            raise BrokerError("zerodha_search_symbols_failed")
+        out: list[InstrumentMatch] = []
+        query_upper = query.upper()
+        lines = response.text.splitlines()
+        for line in lines[1:]:
+            cols = line.split(",")
+            if len(cols) < 12:
+                continue
+            tsym = cols[2]
+            exch = cols[11]
+            if query_upper not in tsym.upper():
+                continue
+            if exchange and exch != exchange:
+                continue
+            out.append(
+                InstrumentMatch(
+                    symbol=tsym,
+                    exchange=exch,
+                    trading_symbol=tsym,
+                    instrument_type=cols[9] if len(cols) > 9 else "EQ",
+                )
+            )
+            if len(out) >= 50:
+                break
+        return out
 
     async def get_quote(self, symbol: str, exchange: str) -> Quote:
         response = await self._http.get(
@@ -137,16 +200,108 @@ class ZerodhaAdapter(BrokerAdapter):
         return out
 
     async def get_depth(self, symbol: str, exchange: str) -> Depth:
-        raise NotImplementedError("TODO: zerodha depth")
+        response = await self._http.get(
+            f"{self._base_url}/quote",
+            params={"i": f"{exchange}:{symbol}"},
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "depth")
+        key = f"{exchange}:{symbol}"
+        entry = data.get("data", {}).get(key, {})
+        raw_depth = entry.get("depth", {})
 
-    async def get_history(self, symbol: str, exchange: str, interval: str, start: datetime, end: datetime):  # type: ignore[override]
-        raise NotImplementedError("TODO: zerodha history")
+        def _levels(side: list[dict] | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("price", 0))),
+                    quantity=Decimal(str(lvl.get("quantity", 0))),
+                )
+                for lvl in (side or [])[:5]
+            ]
+
+        return Depth(bids=_levels(raw_depth.get("buy")), asks=_levels(raw_depth.get("sell")))
+
+    async def get_history(  # type: ignore[override]
+        self,
+        symbol: str,
+        exchange: str,  # noqa: ARG002
+        interval: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[Candle]:
+        # NOTE: Kite's historical endpoint requires an instrument_token (numeric).
+        # The caller must pass the instrument token as ``symbol`` for Zerodha.
+        k_interval = {
+            "1m": "minute",
+            "5m": "5minute",
+            "15m": "15minute",
+            "1h": "60minute",
+            "1d": "day",
+        }.get(interval, "day")
+        response = await self._http.get(
+            f"{self._base_url}/instruments/historical/{symbol}/{k_interval}",
+            params={
+                "from": start.strftime("%Y-%m-%d %H:%M:%S"),
+                "to": end.strftime("%Y-%m-%d %H:%M:%S"),
+                "oi": 0,
+            },
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "history")
+        out: list[Candle] = []
+        for row in (data.get("data") or {}).get("candles", []) or []:
+            ts, o, h, l, c, v, *_ = row
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=interval,
+                    ts=datetime.fromisoformat(str(ts).replace("Z", "+00:00")),
+                    open=Decimal(str(o)),
+                    high=Decimal(str(h)),
+                    low=Decimal(str(l)),
+                    close=Decimal(str(c)),
+                    volume=Decimal(str(v)),
+                )
+            )
+        return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: zerodha orderbook")
+        response = await self._http.get(f"{self._base_url}/orders", headers=self._headers())
+        data = await safe_json(response, self.broker_id, "orderbook")
+        out: list[BrokerOrder] = []
+        for item in data.get("data", []) or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("order_id", "")),
+                    symbol=item.get("tradingsymbol", ""),
+                    status=str(item.get("status", "")),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("price", 0))) if item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: zerodha tradebook")
+        response = await self._http.get(f"{self._base_url}/trades", headers=self._headers())
+        data = await safe_json(response, self.broker_id, "tradebook")
+        out: list[BrokerTrade] = []
+        for item in data.get("data", []) or []:
+            raw_ts = item.get("fill_timestamp") or item.get("exchange_timestamp", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("trade_id", "")),
+                    broker_order_id=str(item.get("order_id", "")),
+                    symbol=item.get("tradingsymbol", ""),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("average_price", 0))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def download_master_contract(self) -> AsyncIterator[InstrumentRecord]:
         response = await self._http.get(f"{self._base_url}/instruments", headers=self._headers())

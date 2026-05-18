@@ -84,8 +84,9 @@ class PaperBroker(BrokerAdapter):
     async def get_depth(self, symbol: str, exchange: str) -> Depth:
         return Depth(bids=[], asks=[])
 
-    async def get_history(self, symbol: str, exchange: str, interval: str, start: datetime, end: datetime):  # type: ignore[override]
-        raise NotImplementedError("paper history not implemented")
+    async def get_history(self, symbol: str, exchange: str, interval: str, start: datetime, end: datetime) -> list:  # type: ignore[override]
+        # Paper broker has no real market data source; return empty list.
+        return []
 
     async def get_orderbook(self) -> list[BrokerOrder]:
         return []

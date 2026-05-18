@@ -25,6 +25,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -195,8 +196,39 @@ class FivePaisaAdapter(BrokerAdapter):
             out[(sym, exch)] = await self.get_quote(sym, exch)
         return out
 
-    async def get_depth(self, symbol: str, exchange: str) -> Depth:  # noqa: ARG002
-        raise NotImplementedError("TODO: 5paisa depth (use MarketDepth endpoint)")
+    async def get_depth(self, symbol: str, exchange: str) -> Depth:
+        body = {
+            "head": {"key": "5paisa-key"},
+            "body": {
+                "Count": 1,
+                "Data": [
+                    {
+                        "Exchange": exchange[0],
+                        "ExchangeType": "C" if exchange in ("NSE", "BSE") else "D",
+                        "ScripCode": int(symbol),
+                    }
+                ],
+            },
+        }
+        response = await self._http.post(
+            f"{self._base_url}/V1/MarketDepth", json=body, headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "depth")
+        detail = (data.get("body", {}).get("Data", []) or [{}])[0]
+
+        def _levels(side: list[dict] | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("Price", 0))),
+                    quantity=Decimal(str(lvl.get("Quantity", 0))),
+                )
+                for lvl in (side or [])[:5]
+            ]
+
+        return Depth(
+            bids=_levels(detail.get("Bids", detail.get("BidData", []))),
+            asks=_levels(detail.get("Offers", detail.get("AskData", []))),
+        )
 
     async def get_history(
         self,
@@ -205,21 +237,95 @@ class FivePaisaAdapter(BrokerAdapter):
         interval: str,
         start: datetime,
         end: datetime,
-    ) -> list[Candle]:  # noqa: ARG002
-        raise NotImplementedError("TODO: 5paisa history")
+    ) -> list[Candle]:
+        # 5paisa historical candle endpoint uses TimeSeries API.
+        fp_interval = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "1d": "1D"}.get(interval, "1D")
+        body = {
+            "head": {"key": "5paisa-key"},
+            "body": {
+                "Exchange": exchange[0],
+                "ExchangeType": "C" if exchange in ("NSE", "BSE") else "D",
+                "ScripCode": int(symbol),
+                "StartDate": start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "EndDate": end.strftime("%Y-%m-%dT%H:%M:%S"),
+                "Interval": fp_interval,
+            },
+        }
+        response = await self._http.post(
+            f"{self._base_url}/V1/HistoricalData", json=body, headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "history")
+        out: list[Candle] = []
+        for item in data.get("body", {}).get("Data", []) or []:
+            raw_ts = item.get("DateTime", item.get("dt", ""))
+            try:
+                ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                ts = utcnow()
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=interval,
+                    ts=ts,
+                    open=Decimal(str(item.get("Open", 0))),
+                    high=Decimal(str(item.get("High", 0))),
+                    low=Decimal(str(item.get("Low", 0))),
+                    close=Decimal(str(item.get("Close", 0))),
+                    volume=Decimal(str(item.get("Volume", 0))),
+                )
+            )
+        return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: 5paisa orderbook")
+        body = {"head": {"key": "5paisa-key"}, "body": {"ClientCode": self._client_code}}
+        response = await self._http.post(
+            f"{self._base_url}/V1/OrderBook", json=body, headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "orderbook")
+        out: list[BrokerOrder] = []
+        for item in data.get("body", {}).get("OrderBookDetail", []) or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("ExchOrderID", item.get("BrokerOrderID", ""))),
+                    symbol=item.get("ScripName", ""),
+                    status=str(item.get("OrderStatus", "")),
+                    quantity=Decimal(str(item.get("Qty", 0))),
+                    price=Decimal(str(item.get("Rate", 0))) if item.get("Rate") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: 5paisa tradebook")
+        body = {"head": {"key": "5paisa-key"}, "body": {"ClientCode": self._client_code}}
+        response = await self._http.post(
+            f"{self._base_url}/V1/TradeBook", json=body, headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "tradebook")
+        out: list[BrokerTrade] = []
+        for item in data.get("body", {}).get("TradeBookDetail", []) or []:
+            raw_ts = item.get("ExchDt") or item.get("ExchTime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("ExchOrderID", "")),
+                    broker_order_id=str(item.get("BrokerOrderID", "")),
+                    symbol=item.get("ScripName", ""),
+                    quantity=Decimal(str(item.get("Qty", 0))),
+                    price=Decimal(str(item.get("Rate", 0))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,
         query: str,  # noqa: ARG002
         exchange: str | None = None,  # noqa: ARG002
     ) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: 5paisa search_symbols")
+        raise BrokerError("five_paisa_search_symbols_not_supported_use_master_contract")
 
     async def health(self) -> BrokerHealth:
         return await health_probe(self._http, "https://openapi.5paisa.com")
