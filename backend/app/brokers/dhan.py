@@ -238,17 +238,51 @@ class DhanAdapter(BrokerAdapter):
         return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: dhan orderbook")
+        response = await self._http.get(f"{self._base_url}/orders", headers=self._headers())
+        items = await safe_json(response, self.broker_id, "orderbook")
+        rows = items if isinstance(items, list) else items.get("data", [])
+        out: list[BrokerOrder] = []
+        for item in rows or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("orderId", "")),
+                    symbol=item.get("tradingSymbol", ""),
+                    status=str(item.get("orderStatus", "")),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("price", 0))) if item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: dhan tradebook")
+        response = await self._http.get(f"{self._base_url}/trades", headers=self._headers())
+        items = await safe_json(response, self.broker_id, "tradebook")
+        rows = items if isinstance(items, list) else items.get("data", [])
+        out: list[BrokerTrade] = []
+        for item in rows or []:
+            raw_ts = item.get("exchangeTime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("tradeId", "")),
+                    broker_order_id=str(item.get("orderId", "")),
+                    symbol=item.get("tradingSymbol", ""),
+                    quantity=Decimal(str(item.get("tradedQuantity", 0))),
+                    price=Decimal(str(item.get("tradePrice", 0))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,
         query: str,  # noqa: ARG002
         exchange: str | None = None,  # noqa: ARG002
     ) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: dhan search_symbols")
+        raise BrokerError("dhan_search_symbols_not_supported_use_master_contract")
 
     async def health(self) -> BrokerHealth:
         return await health_probe(self._http, f"{self._base_url}/profile", self._headers())

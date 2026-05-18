@@ -26,6 +26,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -169,8 +170,23 @@ class ShoonyaAdapter(BrokerAdapter):
             out[(s, e)] = await self.get_quote(s, e)
         return out
 
-    async def get_depth(self, symbol: str, exchange: str) -> Depth:  # noqa: ARG002
-        raise NotImplementedError("TODO: shoonya depth (use GetQuotes; depth in same payload)")
+    async def get_depth(self, symbol: str, exchange: str) -> Depth:
+        data = await self._post(
+            "GetQuotes", {"uid": self._uid, "exch": exchange, "token": symbol}, "depth"
+        )
+        # Shoonya returns dp5 (buy depth) and sp5 (sell depth) as lists of
+        # {"prc": price, "qty": quantity, "orders": orders}.
+
+        def _levels(raw: list | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("prc", 0))),
+                    quantity=Decimal(str(lvl.get("qty", 0))),
+                )
+                for lvl in (raw or [])[:5]
+            ]
+
+        return Depth(bids=_levels(data.get("dp5")), asks=_levels(data.get("sp5")))
 
     async def get_history(
         self,
@@ -179,14 +195,83 @@ class ShoonyaAdapter(BrokerAdapter):
         interval: str,
         start: datetime,
         end: datetime,
-    ) -> list[Candle]:  # noqa: ARG002
-        raise NotImplementedError("TODO: shoonya history (TPSeries endpoint)")
+    ) -> list[Candle]:
+        s_interval = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "1d": "1440"}.get(interval, "1")
+        body = {
+            "uid": self._uid,
+            "exch": exchange,
+            "token": symbol,
+            "st": str(int(start.timestamp())),
+            "et": str(int(end.timestamp())),
+            "intrv": s_interval,
+        }
+        data = await self._post("TPSeries", body, "history")
+        rows = data if isinstance(data, list) else []
+        out: list[Candle] = []
+        for item in rows:
+            # Shoonya: {ssboe, into, inth, intl, intc, intv, ...}
+            raw_ts = item.get("ssboe") or item.get("time", "")
+            try:
+                ts = datetime.fromtimestamp(int(raw_ts))
+            except (ValueError, TypeError):
+                ts = utcnow()
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=interval,
+                    ts=ts,
+                    open=Decimal(str(item.get("into", 0))),
+                    high=Decimal(str(item.get("inth", 0))),
+                    low=Decimal(str(item.get("intl", 0))),
+                    close=Decimal(str(item.get("intc", 0))),
+                    volume=Decimal(str(item.get("intv", 0))),
+                )
+            )
+        return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: shoonya orderbook")
+        data = await self._post("OrderBook", {"uid": self._uid}, "orderbook")
+        rows = data if isinstance(data, list) else []
+        out: list[BrokerOrder] = []
+        for item in rows:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("norenordno", "")),
+                    symbol=item.get("tsym", ""),
+                    status=str(item.get("status", item.get("st", ""))),
+                    quantity=Decimal(str(item.get("qty", 0))),
+                    price=Decimal(str(item.get("prc", 0))) if item.get("prc") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: shoonya tradebook")
+        data = await self._post("TradeBook", {"uid": self._uid, "actid": self._uid}, "tradebook")
+        rows = data if isinstance(data, list) else []
+        out: list[BrokerTrade] = []
+        for item in rows:
+            raw_ts = item.get("exch_tm") or item.get("fltm", "")
+            try:
+                # Shoonya sends exchange time as "DD-Mon-YYYY HH:MM:SS" or epoch
+                from datetime import datetime as _dt
+
+                ts = _dt.strptime(str(raw_ts), "%d-%b-%Y %H:%M:%S")
+            except (ValueError, TypeError):
+                try:
+                    ts = datetime.fromtimestamp(int(raw_ts))
+                except (ValueError, TypeError):
+                    ts = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("ftransno", "")),
+                    broker_order_id=str(item.get("norenordno", "")),
+                    symbol=item.get("tsym", ""),
+                    quantity=Decimal(str(item.get("qty", 0))),
+                    price=Decimal(str(item.get("flprc", 0))),
+                    traded_at=ts,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,

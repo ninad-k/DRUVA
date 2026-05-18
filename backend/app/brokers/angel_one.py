@@ -26,6 +26,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -189,8 +190,27 @@ class AngelOneAdapter(BrokerAdapter):
             out[(s, e)] = await self.get_quote(s, e)
         return out
 
-    async def get_depth(self, symbol: str, exchange: str) -> Depth:  # noqa: ARG002
-        raise NotImplementedError("TODO: angel_one depth (mode=FULL on quote endpoint)")
+    async def get_depth(self, symbol: str, exchange: str) -> Depth:
+        body = {"mode": "FULL", "exchangeTokens": {exchange: [symbol]}}
+        response = await self._http.post(
+            f"{self._base_url}/rest/secure/angelbroking/market/v1/quote/",
+            json=body,
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "depth")
+        fetched = (data.get("data") or {}).get("fetched", []) or []
+        raw_depth = fetched[0].get("depth", {}) if fetched else {}
+
+        def _levels(side: list[dict] | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("price", 0))),
+                    quantity=Decimal(str(lvl.get("quantity", 0))),
+                )
+                for lvl in (side or [])[:5]
+            ]
+
+        return Depth(bids=_levels(raw_depth.get("buy")), asks=_levels(raw_depth.get("sell")))
 
     async def get_history(
         self,
@@ -237,10 +257,48 @@ class AngelOneAdapter(BrokerAdapter):
         return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: angel_one orderbook")
+        response = await self._http.get(
+            f"{self._base_url}/rest/secure/angelbroking/order/v1/getOrderBook",
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "orderbook")
+        out: list[BrokerOrder] = []
+        for item in data.get("data", []) or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("orderid", "")),
+                    symbol=item.get("tradingsymbol", ""),
+                    status=str(item.get("status", "")),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("price", 0))) if item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: angel_one tradebook")
+        response = await self._http.get(
+            f"{self._base_url}/rest/secure/angelbroking/order/v1/getTradeBook",
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "tradebook")
+        out: list[BrokerTrade] = []
+        for item in data.get("data", []) or []:
+            raw_ts = item.get("updatetime") or item.get("exchorderupdatetime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("uniqueorderid", item.get("orderid", ""))),
+                    broker_order_id=str(item.get("orderid", "")),
+                    symbol=item.get("tradingsymbol", ""),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("tradeprice", item.get("averageprice", 0)))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,

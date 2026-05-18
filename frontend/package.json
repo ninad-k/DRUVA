@@ -18,8 +18,8 @@
     "proto:generate": "buf generate"
   },
   "dependencies": {
-    "@bufbuild/connect": "^1.6.1",
-    "@bufbuild/connect-web": "^1.6.1",
+    "@connectrpc/connect": "^1.7.0",
+    "@connectrpc/connect-web": "^1.7.0",
     "@bufbuild/protobuf": "^1.10.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-avatar": "^1.1.2",
@@ -57,8 +57,8 @@
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.45.0",
-    "@bufbuild/protoc-gen-es": "^1.10.0",
-    "@connectrpc/protoc-gen-connect-es": "^1.6.1",
+    "@bufbuild/protoc-gen-es": "^1.10.1",
+    "@connectrpc/protoc-gen-connect-es": "^1.7.0",
     "@playwright/test": "^1.48.2",
     "@tanstack/router-devtools": "^1.82.0",
     "@testing-library/jest-dom": "^6.6.3",

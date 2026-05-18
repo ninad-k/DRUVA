@@ -25,6 +25,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -188,24 +189,118 @@ class AliceBlueAdapter(BrokerAdapter):
             out[(s, e)] = await self.get_quote(s, e)
         return out
 
-    async def get_depth(self, symbol: str, exchange: str) -> Depth:  # noqa: ARG002
-        raise NotImplementedError("TODO: alice_blue depth")
+    async def get_depth(self, symbol: str, exchange: str) -> Depth:
+        response = await self._http.get(
+            f"{self._base_url}/marketData",
+            params={"exch": exchange, "symbol": symbol, "type": "depth"},
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "depth")
+        # AliceBlue ANT returns depth under "DPR" or directly as bids/asks lists.
+        raw = data if isinstance(data, dict) else {}
+
+        def _levels(side: list[dict] | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("Price", lvl.get("price", 0)))),
+                    quantity=Decimal(str(lvl.get("Quantity", lvl.get("quantity", 0)))),
+                )
+                for lvl in (side or [])[:5]
+            ]
+
+        return Depth(
+            bids=_levels(raw.get("BidData", raw.get("bids", []))),
+            asks=_levels(raw.get("AskData", raw.get("asks", []))),
+        )
 
     async def get_history(
         self,
         symbol: str,
-        exchange: str,
+        exchange: str,  # noqa: ARG002
         interval: str,
         start: datetime,
         end: datetime,
-    ) -> list[Candle]:  # noqa: ARG002
-        raise NotImplementedError("TODO: alice_blue history (use chart endpoint)")
+    ) -> list[Candle]:
+        # AliceBlue ANT chart endpoint: GET /history
+        response = await self._http.get(
+            f"{self._base_url}/history",
+            params={
+                "symbol": symbol,
+                "resolution": interval,
+                "from": int(start.timestamp()),
+                "to": int(end.timestamp()),
+            },
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "history")
+        out: list[Candle] = []
+        # TradingView-style response: {t: [timestamps], o, h, l, c, v}
+        times = data.get("t", []) or []
+        opens = data.get("o", []) or []
+        highs = data.get("h", []) or []
+        lows = data.get("l", []) or []
+        closes = data.get("c", []) or []
+        volumes = data.get("v", []) or []
+        for i, ts in enumerate(times):
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=interval,
+                    ts=datetime.fromtimestamp(int(ts)),
+                    open=Decimal(str(opens[i] if i < len(opens) else 0)),
+                    high=Decimal(str(highs[i] if i < len(highs) else 0)),
+                    low=Decimal(str(lows[i] if i < len(lows) else 0)),
+                    close=Decimal(str(closes[i] if i < len(closes) else 0)),
+                    volume=Decimal(str(volumes[i] if i < len(volumes) else 0)),
+                )
+            )
+        return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: alice_blue orderbook")
+        response = await self._http.get(
+            f"{self._base_url}/placeOrder/orderBook", headers=self._headers()
+        )
+        rows = await safe_json(response, self.broker_id, "orderbook")
+        if not isinstance(rows, list):
+            rows = rows.get("data", [])
+        out: list[BrokerOrder] = []
+        for item in rows or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("Nstordno", item.get("nestOrderNumber", ""))),
+                    symbol=item.get("Tsym", item.get("tradingSymbol", "")),
+                    status=str(item.get("Status", item.get("status", ""))),
+                    quantity=Decimal(str(item.get("Qty", item.get("qty", 0)))),
+                    price=Decimal(str(item.get("Prc", item.get("price", 0)))) if item.get("Prc") or item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: alice_blue tradebook")
+        response = await self._http.get(
+            f"{self._base_url}/placeOrder/tradeBook", headers=self._headers()
+        )
+        rows = await safe_json(response, self.broker_id, "tradebook")
+        if not isinstance(rows, list):
+            rows = rows.get("data", [])
+        out: list[BrokerTrade] = []
+        for item in rows or []:
+            raw_ts = item.get("Exchtm") or item.get("exchTime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("Flordno", item.get("tradeId", ""))),
+                    broker_order_id=str(item.get("Nstordno", item.get("nestOrderNumber", ""))),
+                    symbol=item.get("Tsym", item.get("tradingSymbol", "")),
+                    quantity=Decimal(str(item.get("Fillshares", item.get("qty", 0)))),
+                    price=Decimal(str(item.get("Flprc", item.get("tradePrice", 0)))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,

@@ -261,17 +261,51 @@ class FyersAdapter(BrokerAdapter):
         return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: fyers orderbook")
+        response = await self._http.get(f"{self._base_url}/orders", headers=self._headers())
+        data = await safe_json(response, self.broker_id, "orderbook")
+        out: list[BrokerOrder] = []
+        for item in data.get("orderBook", []) or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("id", "")),
+                    symbol=item.get("symbol", ""),
+                    status=str(item.get("status", "")),
+                    quantity=Decimal(str(item.get("qty", 0))),
+                    price=Decimal(str(item.get("limitPrice", 0))) if item.get("limitPrice") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: fyers tradebook")
+        response = await self._http.get(f"{self._base_url}/trades", headers=self._headers())
+        data = await safe_json(response, self.broker_id, "tradebook")
+        out: list[BrokerTrade] = []
+        for item in data.get("tradeBook", []) or []:
+            raw_ts = item.get("orderDateTime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("tradeNumber", item.get("id", ""))),
+                    broker_order_id=str(item.get("orderNumber", item.get("id", ""))),
+                    symbol=item.get("symbol", ""),
+                    quantity=Decimal(str(item.get("tradedQty", item.get("qty", 0)))),
+                    price=Decimal(str(item.get("tradePrice", item.get("limitPrice", 0)))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,
         query: str,  # noqa: ARG002
         exchange: str | None = None,  # noqa: ARG002
     ) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: fyers search_symbols")
+        # Fyers does not expose a real-time symbol search REST endpoint.
+        # Users should download the master contract from the Fyers symbol master URL.
+        raise BrokerError("fyers_search_symbols_not_supported_use_master_contract")
 
     async def health(self) -> BrokerHealth:
         return await health_probe(self._http, f"{self._base_url}/profile", self._headers())

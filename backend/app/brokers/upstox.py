@@ -251,17 +251,53 @@ class UpstoxAdapter(BrokerAdapter):
         return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: upstox orderbook")
+        response = await self._http.get(
+            f"{self._base_url}/order/retrieve-all", headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "orderbook")
+        out: list[BrokerOrder] = []
+        for item in data.get("data", []) or []:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("order_id", "")),
+                    symbol=item.get("trading_symbol", "") or item.get("tradingsymbol", ""),
+                    status=str(item.get("status", "")),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("price", 0))) if item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: upstox tradebook")
+        response = await self._http.get(
+            f"{self._base_url}/order/trades/get-trades-for-day", headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "tradebook")
+        out: list[BrokerTrade] = []
+        for item in data.get("data", []) or []:
+            raw_ts = item.get("order_execution_time") or item.get("exchange_timestamp", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("trade_id", "")),
+                    broker_order_id=str(item.get("order_id", "")),
+                    symbol=item.get("trading_symbol", "") or item.get("tradingsymbol", ""),
+                    quantity=Decimal(str(item.get("quantity", 0))),
+                    price=Decimal(str(item.get("average_price", 0))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,
         query: str,  # noqa: ARG002
         exchange: str | None = None,  # noqa: ARG002
     ) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: upstox search_symbols (use master contract download)")
+        raise BrokerError("upstox_search_symbols_not_supported_use_master_contract")
 
     async def health(self) -> BrokerHealth:
         return await health_probe(self._http, f"{self._base_url}/user/profile", self._headers())

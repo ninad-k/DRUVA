@@ -27,6 +27,7 @@ from app.brokers.base import (
     BrokerPosition,
     BrokerTrade,
     Depth,
+    DepthLevel,
     InstrumentMatch,
     InstrumentRecord,
     MarginDetails,
@@ -183,8 +184,29 @@ class KotakNeoAdapter(BrokerAdapter):
             out[(s, e)] = await self.get_quote(s, e)
         return out
 
-    async def get_depth(self, symbol: str, exchange: str) -> Depth:  # noqa: ARG002
-        raise NotImplementedError("TODO: kotak_neo depth")
+    async def get_depth(self, symbol: str, exchange: str) -> Depth:
+        response = await self._http.get(
+            f"{self._base_url}/quotes/v1/depth",
+            params={"exSeg": exchange, "symbol": symbol},
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "depth")
+        rows = data.get("data", []) or []
+        oi_data = rows[0] if rows else {}
+
+        def _levels(side: list[dict] | None) -> list[DepthLevel]:
+            return [
+                DepthLevel(
+                    price=Decimal(str(lvl.get("price", lvl.get("pr", 0)))),
+                    quantity=Decimal(str(lvl.get("qty", lvl.get("qty", 0)))),
+                )
+                for lvl in (side or [])[:5]
+            ]
+
+        return Depth(
+            bids=_levels(oi_data.get("bids", oi_data.get("bp5", []))),
+            asks=_levels(oi_data.get("asks", oi_data.get("sp5", []))),
+        )
 
     async def get_history(
         self,
@@ -193,21 +215,89 @@ class KotakNeoAdapter(BrokerAdapter):
         interval: str,
         start: datetime,
         end: datetime,
-    ) -> list[Candle]:  # noqa: ARG002
-        raise NotImplementedError("TODO: kotak_neo history")
+    ) -> list[Candle]:
+        k_type = {"1m": "1minute", "5m": "5minute", "15m": "15minute", "1h": "60minute", "1d": "day"}.get(
+            interval, "day"
+        )
+        response = await self._http.get(
+            f"{self._base_url}/historical-candle/v1/",
+            params={
+                "exSeg": exchange,
+                "symbol": symbol,
+                "start": start.strftime("%Y-%m-%d %H:%M:%S"),
+                "end": end.strftime("%Y-%m-%d %H:%M:%S"),
+                "type": k_type,
+            },
+            headers=self._headers(),
+        )
+        data = await safe_json(response, self.broker_id, "history")
+        out: list[Candle] = []
+        for row in data.get("data", {}).get("candles", []) or []:
+            ts, o, h, l, c, v, *_ = row
+            out.append(
+                Candle(
+                    symbol=symbol,
+                    timeframe=interval,
+                    ts=datetime.fromisoformat(str(ts).replace("Z", "+00:00")),
+                    open=Decimal(str(o)),
+                    high=Decimal(str(h)),
+                    low=Decimal(str(l)),
+                    close=Decimal(str(c)),
+                    volume=Decimal(str(v)),
+                )
+            )
+        return out
 
     async def get_orderbook(self) -> list[BrokerOrder]:
-        raise NotImplementedError("TODO: kotak_neo orderbook")
+        response = await self._http.get(
+            f"{self._base_url}/Orders/2.0/quick/user/orders", headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "orderbook")
+        rows = data.get("data", []) or []
+        out: list[BrokerOrder] = []
+        for item in rows:
+            out.append(
+                BrokerOrder(
+                    broker_order_id=str(item.get("nOrdNo", item.get("orderId", ""))),
+                    symbol=item.get("trdSym", item.get("tradingSymbol", "")),
+                    status=str(item.get("ordSt", item.get("status", ""))),
+                    quantity=Decimal(str(item.get("qty", item.get("quantity", 0)))),
+                    price=Decimal(str(item.get("prc", item.get("price", 0)))) if item.get("prc") or item.get("price") else None,
+                )
+            )
+        return out
 
     async def get_tradebook(self) -> list[BrokerTrade]:
-        raise NotImplementedError("TODO: kotak_neo tradebook")
+        response = await self._http.get(
+            f"{self._base_url}/Orders/2.0/quick/user/trades", headers=self._headers()
+        )
+        data = await safe_json(response, self.broker_id, "tradebook")
+        rows = data.get("data", []) or []
+        out: list[BrokerTrade] = []
+        for item in rows:
+            raw_ts = item.get("exTimStm") or item.get("exchOrderUpdateTime", "")
+            try:
+                traded_at = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                traded_at = utcnow()
+            out.append(
+                BrokerTrade(
+                    broker_trade_id=str(item.get("tradeNo", item.get("tradeId", ""))),
+                    broker_order_id=str(item.get("nOrdNo", item.get("orderId", ""))),
+                    symbol=item.get("trdSym", item.get("tradingSymbol", "")),
+                    quantity=Decimal(str(item.get("flQty", item.get("quantity", 0)))),
+                    price=Decimal(str(item.get("flPrc", item.get("tradePrice", 0)))),
+                    traded_at=traded_at,
+                )
+            )
+        return out
 
     async def search_symbols(
         self,
         query: str,  # noqa: ARG002
         exchange: str | None = None,  # noqa: ARG002
     ) -> list[InstrumentMatch]:
-        raise NotImplementedError("TODO: kotak_neo search_symbols")
+        raise BrokerError("kotak_neo_search_symbols_not_supported_use_master_contract")
 
     async def health(self) -> BrokerHealth:
         return await health_probe(
