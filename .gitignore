@@ -102,3 +102,8 @@ obj/
 *.suo
 *.user
 *.nupkg
+/.claude/worktrees/agent-a5e0867ac06c6eddd/
+/.claude/worktrees/agent-a8e906bbc672b2e86/
+/.claude/worktrees/agent-a431496190193ddde/
+/.claude/worktrees/agent-ae6d059e881ecfa7e/
+/.claude/settings.local.json
