@@ -1,5 +1,5 @@
-import { createGrpcWebTransport } from "@bufbuild/connect-web";
-import type { Interceptor } from "@bufbuild/connect";
+import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import type { Interceptor } from "@connectrpc/connect";
 
 /**
  * gRPC-Web transport pointed at Envoy (which upstreams to our Python gRPC server).
