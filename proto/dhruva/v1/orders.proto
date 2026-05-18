@@ -58,8 +58,6 @@ message ListOrdersResponse {
   PageInfo page_info = 2;
 }
 
-message Empty {}
-
 service OrderService {
   rpc PlaceOrder(PlaceOrderRequest) returns (Order);
   rpc CancelOrder(CancelOrderRequest) returns (Order);

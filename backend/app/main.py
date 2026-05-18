@@ -99,6 +99,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     start_scheduler()
 
+    # ----- gRPC server (runs alongside FastAPI on a separate port) -------
+    import asyncio as _asyncio
+    _grpc_stop = _asyncio.Event()
+    from app.api.grpc.server import serve as _grpc_serve
+    grpc_task = asyncio.create_task(_grpc_serve(stop_event=_grpc_stop), name="grpc_server")
+    app.state.grpc_stop_event = _grpc_stop
+    app.state.grpc_task = grpc_task
+
     # ----- Telegram inbound listener -------------------------------------
     listener_task = None
     if settings.telegram_bot_token:
@@ -132,6 +140,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         listener = app.state.telegram_listener
         await listener.stop()
         listener_task.cancel()
+
+    # gRPC server shutdown
+    app.state.grpc_stop_event.set()
+    grpc_task.cancel()
+    await asyncio.gather(grpc_task, return_exceptions=True)
 
     # Streaming bus shutdown
     await ohlcv_writer.stop()

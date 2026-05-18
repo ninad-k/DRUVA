@@ -26,8 +26,9 @@ htmlcov/
 .tox/
 .hypothesis/
 
-# Auto-generated gRPC stubs
-backend/app/api/grpc/_generated/
+# Auto-generated gRPC stubs (regenerate: bash backend/scripts/generate_proto.sh)
+# Committing stubs for reproducible builds — no grpc-tools needed on CI
+# backend/app/api/grpc/_generated/
 
 # Alembic local
 backend/alembic/versions/__pycache__/
