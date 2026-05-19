@@ -56,6 +56,7 @@ def register_jobs(
     cache_factory: Callable[[], CacheClient],
     redis_factory: Callable[[], Redis],
     telegram_notifier: TelegramNotifier,
+    email_notifier=None,  # app.core.notifications.email.EmailNotifier | None
 ) -> None:
     # 1. Broker health monitor — every 60 s.
     async def health_job() -> None:
@@ -228,7 +229,139 @@ def register_jobs(
             replace_existing=True,
         )
 
-    # 6. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
+    # 6. Regime executor — runs 30 min after NSE close (10:30 UTC = 16:00 IST).
+    #    Fetches latest NIFTY 50 daily bar, applies HMM → VIX → circuit breaker → execution.
+    if getattr(settings, "regime_trader_enabled", False):
+        from app.core.execution.regime_executor import RegimeExecutor
+        from app.strategies.ml.regime_trader.strategy import RegimeTraderStrategy
+
+        async def regime_bar_job() -> None:
+            import yfinance as yf
+            import pandas as pd
+            from datetime import datetime, timedelta
+
+            try:
+                end = datetime.utcnow()
+                start = end - timedelta(days=365)
+                raw = yf.download("^NSEI", start=start.strftime("%Y-%m-%d"),
+                                  end=end.strftime("%Y-%m-%d"), interval="1d",
+                                  auto_adjust=True, progress=False)
+                if raw is None or len(raw) == 0:
+                    logger.warning("regime_bar_job.no_data")
+                    return
+                if hasattr(raw.columns, "get_level_values"):
+                    raw.columns = raw.columns.get_level_values(0)
+                ohlcv = raw.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
+                ohlcv["volume"] = ohlcv["volume"].replace(0, 1).fillna(1)
+                ohlcv.index = pd.to_datetime(ohlcv.index).tz_localize(None)
+
+                async with session_factory() as session:
+                    from app.api.dependencies import build_execution_service_for_session
+                    cache = cache_factory()
+                    exec_svc = build_execution_service_for_session(
+                        session=session, http=http, cache=cache,
+                        redis=redis_factory(), settings=settings, notifier=telegram_notifier,
+                    )
+                    strategy = RegimeTraderStrategy(id="regime_trader_main", account_id="system")
+                    executor = RegimeExecutor(
+                        execution_service=exec_svc,
+                        strategy=strategy,
+                        telegram_notifier=telegram_notifier,
+                        email_notifier=email_notifier,
+                        account_id="system",
+                        telegram_chat_id=getattr(settings, "regime_alert_chat_id", ""),
+                        alert_emails=getattr(settings, "regime_alert_emails", []),
+                    )
+                    result = await executor.run_daily_bar(ohlcv)
+                    logger.info("scheduler.regime_bar_ok", **{k: v for k, v in result.items()
+                                                              if k != "exec_summary"})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("scheduler.regime_bar_failed", error=str(exc))
+
+        scheduler.add_job(
+            regime_bar_job,
+            CronTrigger(day_of_week="mon-fri", hour=10, minute=30),
+            id="regime_daily_bar",
+            replace_existing=True,
+        )
+
+    # 7. Rebalance drift check — 15 min after NSE close (10:15 UTC = 15:45 IST).
+    if getattr(settings, "rebalance_enabled", False):
+        from app.core.portfolio.rebalance_scheduler import RebalanceScheduler
+
+        async def rebalance_drift_job() -> None:
+            try:
+                async with session_factory() as session:
+                    from app.api.dependencies import build_execution_service_for_session
+                    cache = cache_factory()
+                    exec_svc = build_execution_service_for_session(
+                        session=session, http=http, cache=cache,
+                        redis=redis_factory(), settings=settings, notifier=telegram_notifier,
+                    )
+                    target_weights = getattr(settings, "rebalance_target_weights", {})
+                    rs = RebalanceScheduler(
+                        execution_service=exec_svc,
+                        target_weights=target_weights,
+                        email_notifier=email_notifier,
+                    )
+                    await rs.trigger_if_needed(session=session)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("scheduler.rebalance_drift_failed", error=str(exc))
+
+        scheduler.add_job(
+            rebalance_drift_job,
+            CronTrigger(day_of_week="mon-fri", hour=10, minute=15),
+            id="rebalance_drift_check",
+            replace_existing=True,
+        )
+
+    # 8. Auto square-off — 3:15 PM IST = 09:45 UTC.
+    async def square_off_job() -> None:
+        try:
+            from app.core.intraday.square_off import AutoSquareOff
+            async with session_factory() as session:
+                from app.api.dependencies import build_execution_service_for_session
+                cache = cache_factory()
+                exec_svc = build_execution_service_for_session(
+                    session=session, http=http, cache=cache,
+                    redis=redis_factory(), settings=settings, notifier=telegram_notifier,
+                )
+                auto_sq = AutoSquareOff(execution_service=exec_svc)
+                await auto_sq.square_off_intraday()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("scheduler.square_off_failed", error=str(exc))
+
+    scheduler.add_job(
+        square_off_job,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=45),
+        id="auto_square_off",
+        replace_existing=True,
+    )
+
+    # 9. SIP due runner — daily at market open (03:45 UTC = 09:15 IST).
+    async def sip_due_job() -> None:
+        try:
+            from app.core.portfolio.sip_engine import SIPEngine
+            async with session_factory() as session:
+                from app.api.dependencies import build_execution_service_for_session
+                cache = cache_factory()
+                exec_svc = build_execution_service_for_session(
+                    session=session, http=http, cache=cache,
+                    redis=redis_factory(), settings=settings, notifier=telegram_notifier,
+                )
+                engine = SIPEngine(execution_service=exec_svc)
+                await engine.run_due(session=session)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("scheduler.sip_due_failed", error=str(exc))
+
+    scheduler.add_job(
+        sip_due_job,
+        CronTrigger(day_of_week="mon-fri", hour=3, minute=45),
+        id="sip_due_runner",
+        replace_existing=True,
+    )
+
+    # 10. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
     if not settings.telegram_bot_token:
         logger.info("scheduler.daily_summary_skipped", reason="no_telegram_token")
         return
