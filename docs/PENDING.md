@@ -141,7 +141,7 @@ python scripts/run_walk_forward.py --data data/nifty50_2020_2026.csv \
 
 ---
 
-## P9 — End-to-End Integration Test (Zerodha Sandbox)
+## ~~P9 — End-to-End Integration Test~~ ✅ DONE
 
 **Goal:** Verify the full order flow from signal to execution on a paper trading account.
 
