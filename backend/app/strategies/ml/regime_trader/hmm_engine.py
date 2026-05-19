@@ -68,6 +68,8 @@ class RegimeDetector:
         )
         self.scaler = StandardScaler()
         self.is_fitted = False
+        # Maps raw HMM state index -> named regime index (set after fit or load)
+        self.state_remap: dict[int, int] = {i: i for i in range(n_regimes)}
 
     def fit(self, ohlcv: pd.DataFrame) -> None:
         """Train HMM on historical OHLCV data.
@@ -87,7 +89,11 @@ class RegimeDetector:
 
         self.model.fit(features)
         self.is_fitted = True
-        logger.info("hmm.fitted", n_regimes=self.n_regimes)
+        # Sort states by mean volatility: highest vol = Crash (0), lowest = Euphoria (4)
+        vol_means = self.model.means_[:, 3]
+        rank = np.argsort(vol_means)[::-1]
+        self.state_remap = {int(old): int(new) for new, old in enumerate(rank)}
+        logger.info("hmm.fitted", n_regimes=self.n_regimes, remap=self.state_remap)
 
     def predict_forward(self, ohlcv: pd.DataFrame) -> np.ndarray:
         """Predict regimes using forward algorithm (no look-ahead).
@@ -108,8 +114,8 @@ class RegimeDetector:
             raise RuntimeError("Model not fitted. Call fit() first.")
 
         features = self._extract_features(ohlcv)
-        regimes = self.model.predict(features)
-        return regimes
+        raw = self.model.predict(features)
+        return np.array([self.state_remap[int(s)] for s in raw])
 
     def predict_proba(self, ohlcv: pd.DataFrame) -> np.ndarray:
         """Predict regime probabilities (posterior).
@@ -175,7 +181,11 @@ class RegimeDetector:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(path, "wb") as f:
-            pickle.dump({"model": self.model, "scaler": self.scaler}, f)
+            pickle.dump({
+                "model": self.model,
+                "scaler": self.scaler,
+                "remap": self.state_remap,
+            }, f)
         logger.info("hmm.saved", path=str(path))
 
     def load(self, path: str | Path) -> None:
@@ -193,10 +203,13 @@ class RegimeDetector:
 
         with open(path, "rb") as f:
             data = pickle.load(f)
-            self.model = data["model"]
+            self.model  = data["model"]
             self.scaler = data["scaler"]
+            # Support both engine-saved and train_regime_hmm.py-saved payloads
+            self.state_remap = {int(k): int(v) for k, v in data.get("remap", {}).items()} \
+                               or {i: i for i in range(self.n_regimes)}
         self.is_fitted = True
-        logger.info("hmm.loaded", path=str(path))
+        logger.info("hmm.loaded", path=str(path), remap=self.state_remap)
 
     # ---- Private feature engineering ----------------------------------------
 
