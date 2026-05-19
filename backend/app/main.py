@@ -25,6 +25,7 @@ from app.api.rest.v1 import (
     options,
     orders,
     reports,
+    risk,
     scan_results,
     scanners,
     strategies,
@@ -249,6 +250,7 @@ def create_app() -> FastAPI:
     app.include_router(market_cycle.router, prefix="/api/v1/market-cycle", tags=["market-cycle"])
     app.include_router(goals.router, prefix="/api/v1/goals", tags=["goals"])
     app.include_router(watchlists.router, prefix="/api/v1/watchlists", tags=["watchlists"])
+    app.include_router(risk.router, prefix="/api/v1/risk", tags=["risk"])
     app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
     app.include_router(webhooks.router_chartink, prefix="/api/v1/webhooks/chartink", tags=["webhooks"])
     app.include_router(webhooks.router_tradingview, prefix="/api/v1/webhooks/tradingview", tags=["webhooks"])

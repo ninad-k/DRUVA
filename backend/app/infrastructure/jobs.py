@@ -16,6 +16,7 @@ skipped at registration time and we log why.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 
 import httpx
@@ -361,7 +362,23 @@ def register_jobs(
         replace_existing=True,
     )
 
-    # 10. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
+    # 10. HMM weekly retrain — every Sunday at 01:00 UTC.
+    async def regime_weekly_retrain_job() -> None:
+        try:
+            from app.strategies.ml.regime_trader.retrain import retrain_regime_hmm
+            result = await asyncio.to_thread(retrain_regime_hmm)
+            logger.info("scheduler.regime_retrain_ok", **result)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("scheduler.regime_retrain_failed", error=str(exc))
+
+    scheduler.add_job(
+        regime_weekly_retrain_job,
+        CronTrigger(day_of_week="sun", hour=1, minute=0),
+        id="regime_weekly_retrain",
+        replace_existing=True,
+    )
+
+    # 11. Daily Telegram summary — weekday 11:00 UTC = 16:30 IST.
     if not settings.telegram_bot_token:
         logger.info("scheduler.daily_summary_skipped", reason="no_telegram_token")
         return
