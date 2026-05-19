@@ -19,7 +19,9 @@ import { ScannerPage } from "@/features/scanner/ScannerPage";
 import { MultibaggerPage } from "@/features/multibagger/MultibaggerPage";
 import { GoalsPage } from "@/features/goals/GoalsPage";
 import { AdvisorPage } from "@/features/advisor/AdvisorPage";
+import { AiAdvisorPage } from "@/features/ai-advisor/AiAdvisorPage";
 import { OptionsPage } from "@/features/options/OptionsPage";
+import { OptionsGreeksPage } from "@/features/options/OptionsGreeksPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { AccountsPage } from "@/features/settings/AccountsPage";
 import { NotificationsPage } from "@/features/settings/NotificationsPage";
@@ -127,10 +129,22 @@ const advisorRoute = createRoute({
   component: AdvisorPage,
 });
 
+const aiAdvisorRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/ai-advisor",
+  component: AiAdvisorPage,
+});
+
 const optionsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/options",
   component: OptionsPage,
+});
+
+const optionsGreeksRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/options/greeks",
+  component: OptionsGreeksPage,
 });
 
 const reportsRoute = createRoute({
@@ -167,7 +181,9 @@ const routeTree = rootRoute.addChildren([
     multibaggerRoute,
     goalsRoute,
     advisorRoute,
+    aiAdvisorRoute,
     optionsRoute,
+    optionsGreeksRoute,
     reportsRoute,
     settingsAccountsRoute,
     settingsNotificationsRoute,

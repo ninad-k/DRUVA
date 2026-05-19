@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.rest.v1 import (
     advisor,
+    ai_advisor,
     approvals,
     auth,
     fundamentals,
@@ -24,6 +25,7 @@ from app.api.rest.v1 import (
     options,
     orders,
     reports,
+    risk,
     scan_results,
     scanners,
     strategies,
@@ -35,6 +37,7 @@ from app.brokers.factory import BrokerFactory
 from app.cache.client import CacheClient
 from app.config import get_settings
 from app.core.execution.approval_service import ApprovalService
+from app.core.notifications.email import get_email_notifier
 from app.core.notifications.telegram import TelegramBotListener, TelegramNotifier
 from app.data.streaming import OhlcvWriter, StreamHub, StreamingManager
 from app.db.session import SessionLocal, engine, get_session
@@ -68,7 +71,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis = await _ensure_redis_singleton()
     cache = CacheClient(redis)
     notifier = TelegramNotifier(bot_token=settings.telegram_bot_token, http=http)
+    email_notifier = get_email_notifier()
     app.state.telegram_notifier = notifier
+    app.state.email_notifier = email_notifier
     app.state.cache = cache
 
     # ----- streaming bus (in-process pub/sub + OHLCV writer) -------------
@@ -97,6 +102,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         cache_factory=lambda: cache,
         redis_factory=lambda: redis,
         telegram_notifier=notifier,
+        email_notifier=email_notifier,
     )
     start_scheduler()
 
@@ -237,12 +243,14 @@ def create_app() -> FastAPI:
     app.include_router(instruments.router, prefix="/api/v1", tags=["instruments"])
     app.include_router(options.router, prefix="/api/v1", tags=["options"])
     app.include_router(advisor.router, prefix="/api/v1/advisor", tags=["advisor"])
+    app.include_router(ai_advisor.router, prefix="/api/v1/ai-advisor", tags=["ai-advisor"])
     app.include_router(scanners.router, prefix="/api/v1/scanners", tags=["scanners"])
     app.include_router(scan_results.router, prefix="/api/v1/scan-results", tags=["scanners"])
     app.include_router(fundamentals.router, prefix="/api/v1/fundamentals", tags=["fundamentals"])
     app.include_router(market_cycle.router, prefix="/api/v1/market-cycle", tags=["market-cycle"])
     app.include_router(goals.router, prefix="/api/v1/goals", tags=["goals"])
     app.include_router(watchlists.router, prefix="/api/v1/watchlists", tags=["watchlists"])
+    app.include_router(risk.router, prefix="/api/v1/risk", tags=["risk"])
     app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
     app.include_router(webhooks.router_chartink, prefix="/api/v1/webhooks/chartink", tags=["webhooks"])
     app.include_router(webhooks.router_tradingview, prefix="/api/v1/webhooks/tradingview", tags=["webhooks"])

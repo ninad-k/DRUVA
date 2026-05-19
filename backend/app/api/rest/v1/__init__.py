@@ -1,4 +1,5 @@
 from app.api.rest.v1 import (
+    ai_advisor,
     approvals,
     auth,
     fundamentals,
@@ -15,6 +16,7 @@ from app.api.rest.v1 import (
 )
 
 __all__ = [
+    "ai_advisor",
     "approvals",
     "auth",
     "fundamentals",

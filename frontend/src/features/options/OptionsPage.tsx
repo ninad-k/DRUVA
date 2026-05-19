@@ -31,6 +31,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { getIvSmile, getOiProfile, getOptionChain } from "@/api/rest/endpoints";
 import { useAccountStore } from "@/store/account";
 import { formatNumber } from "@/utils/format";
+import { GreeksDashboard } from "./GreeksDashboard";
+import type { OptionPosition } from "./GreeksDashboard";
+
+// Placeholder — replace with a real positions query (e.g. from useAccountStore / API)
+// when live Greeks data is available from the backend.
+const EMPTY_POSITIONS: OptionPosition[] = [];
 
 export function OptionsPage() {
   const accountId = useAccountStore((s) => s.activeAccountId);
@@ -127,6 +133,7 @@ export function OptionsPage() {
           <TabsTrigger value="chain">Chain</TabsTrigger>
           <TabsTrigger value="oi">OI Profile</TabsTrigger>
           <TabsTrigger value="iv">IV Smile</TabsTrigger>
+          <TabsTrigger value="greeks">Greeks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chain">
@@ -270,6 +277,10 @@ export function OptionsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="greeks">
+          <GreeksDashboard positions={EMPTY_POSITIONS} />
         </TabsContent>
       </Tabs>
     </div>

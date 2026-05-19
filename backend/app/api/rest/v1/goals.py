@@ -47,6 +47,15 @@ class StpPlan(BaseModel):
     day_of_month: int = 5
 
 
+class SimulatePayload(BaseModel):
+    annual_return_pct: float = 12.0
+    annual_volatility_pct: float = 18.0
+    sip_step_up_pct: float = 10.0
+    n_simulations: int = 1000
+    regime_return_adj_pct: float = 0.0
+    seed: int = 42
+
+
 @router.post("", status_code=201)
 async def create_goal(
     payload: GoalCreate,
@@ -188,6 +197,45 @@ async def list_executions(
         }
         for r in rows
     ]
+
+
+@router.post("/{goal_id}/simulate")
+async def simulate_goal(
+    goal_id: UUID,
+    payload: SimulatePayload,
+    _user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Run Monte Carlo simulation for a goal and return P10/P50/P90 fan data."""
+    from datetime import date as _date
+    from app.core.portfolio.monte_carlo import MonteCarloInput, run_simulation
+
+    goal = await session.get(InvestmentGoal, goal_id)
+    if goal is None:
+        raise HTTPException(status_code=404, detail="goal_not_found")
+
+    today = _date.today()
+    months_remaining = max(
+        1,
+        (goal.target_date.year - today.year) * 12
+        + (goal.target_date.month - today.month),
+    )
+    horizon_years = months_remaining / 12.0
+
+    inp = MonteCarloInput(
+        current_value=float(goal.current_value),
+        monthly_sip=float(goal.monthly_sip_amount),
+        target_corpus=float(goal.target_amount),
+        horizon_years=horizon_years,
+        annual_return_pct=payload.annual_return_pct,
+        annual_volatility_pct=payload.annual_volatility_pct,
+        sip_step_up_pct=payload.sip_step_up_pct,
+        n_simulations=min(payload.n_simulations, 5000),
+        regime_return_adj_pct=payload.regime_return_adj_pct,
+        seed=payload.seed,
+    )
+    result = run_simulation(inp)
+    return result.to_dict()
 
 
 @router.post("/{goal_id}/pause")

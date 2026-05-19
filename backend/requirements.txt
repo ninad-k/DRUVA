@@ -56,6 +56,7 @@ vectorbt>=0.26
 scikit-learn>=1.6
 xgboost>=2.1
 lightgbm>=4.5
+hmmlearn>=0.3.0
 joblib>=1.4
 # torch is optional and heavy — install separately if LSTM/RL is needed:
 # torch>=2.5
@@ -84,6 +85,12 @@ openpyxl>=3.1.5
 aiosmtplib>=3.0
 jinja2>=3.1
 python-telegram-bot>=21.7
+
+# --- AI / LLM ---------------------------------------------------------------
+# Set ANTHROPIC_API_KEY for Claude (preferred) or OPENAI_API_KEY for GPT-4o.
+# Both are optional at install time — only the active provider needs to be installed.
+anthropic>=0.40.0
+openai>=1.30.0
 
 # --- WebSockets -------------------------------------------------------------
 websockets>=13

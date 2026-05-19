@@ -1,6 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Activity,
   BarChart3,
+  Bot,
   Brain,
   Briefcase,
   CandlestickChart,
@@ -32,7 +34,9 @@ const NAV: NavItem[] = [
   { label: "Multibagger", to: "/multibagger", icon: Gem },
   { label: "Goals", to: "/goals", icon: Target },
   { label: "AI Advisor", to: "/advisor", icon: Brain },
+  { label: "AI Chat Advisor", to: "/ai-advisor", icon: Bot },
   { label: "Options", to: "/options", icon: CandlestickChart },
+  { label: "Options Greeks", to: "/options/greeks", icon: Activity },
   { label: "Reports", to: "/reports", icon: FileText },
   { label: "Settings", to: "/settings/accounts", icon: Settings, match: ["/settings"] },
 ];

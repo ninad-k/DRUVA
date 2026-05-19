@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Target } from "lucide-react";
 import { toast } from "sonner";
+import { MonteCarloChart } from "./MonteCarloChart";
 import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ export function GoalsPage() {
 
 function GoalCard({ goal }: { goal: Goal }) {
   const qc = useQueryClient();
+  const [showSimulate, setShowSimulate] = useState(false);
   const { data: progress } = useQuery({
     queryKey: ["goal-progress", goal.id],
     queryFn: () => getGoalProgress(goal.id),
@@ -115,7 +117,7 @@ function GoalCard({ goal }: { goal: Goal }) {
   });
 
   return (
-    <Card>
+    <Card className="col-span-full xl:col-span-1">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between">
           <div>
@@ -163,7 +165,21 @@ function GoalCard({ goal }: { goal: Goal }) {
             {goal.status === "active" ? "Pause" : "Resume"}
           </Button>
           <StpDialog goalId={goal.id} />
+          <Button
+            size="sm"
+            variant={showSimulate ? "default" : "secondary"}
+            onClick={() => setShowSimulate((v) => !v)}
+          >
+            {showSimulate ? "Hide projections" : "Monte Carlo"}
+          </Button>
         </div>
+
+        {showSimulate && (
+          <MonteCarloChart
+            goalId={goal.id}
+            targetCorpus={Number(goal.target_amount)}
+          />
+        )}
       </CardContent>
     </Card>
   );

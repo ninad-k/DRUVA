@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import uuid
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +15,10 @@ from app.core.strategy.backtest import BacktestEngine
 from app.core.strategy.service import StrategyService
 from app.db.models.user import User
 from app.db.session import get_session
+from app.infrastructure.logging import get_logger
 from app.strategies.registry import all_strategies
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -150,6 +155,28 @@ async def backtest(
         "equity_curve": result.equity_curve,
         "trades": [trade.__dict__ for trade in result.trades],
     }
+
+
+@router.post("/regime-trader/retrain")
+async def retrain_regime_trader(
+    background_tasks: BackgroundTasks,
+    _user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    """Trigger an on-demand HMM retrain. Returns immediately; retrain runs in background."""
+    from app.strategies.ml.regime_trader.retrain import retrain_regime_hmm
+
+    job_id = str(uuid.uuid4())
+
+    async def _run() -> None:
+        logger.info("retrain.endpoint_triggered", job_id=job_id)
+        try:
+            result = await asyncio.to_thread(retrain_regime_hmm)
+            logger.info("retrain.endpoint_ok", job_id=job_id, **result)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("retrain.endpoint_failed", job_id=job_id, error=str(exc))
+
+    background_tasks.add_task(_run)
+    return {"status": "retrain_started", "job_id": job_id}
 
 
 def _strategy_to_dict(strategy) -> dict[str, object]:  # type: ignore[no-untyped-def]
