@@ -1,13 +1,15 @@
-"""AI-powered portfolio advisor using Claude API.
+"""AI-powered portfolio advisor — supports Claude (Anthropic) and GPT-4o (OpenAI).
+
+Provider selection (auto-detected from env vars, Anthropic preferred):
+  ANTHROPIC_API_KEY set → uses claude-sonnet-4-6 with prompt caching
+  OPENAI_API_KEY set    → uses gpt-4o
+  Both set              → Anthropic wins (unless provider="openai" is passed explicitly)
 
 Provides:
   1. Natural language Q&A about the portfolio
   2. Regime-aware rebalancing suggestions
   3. Multibagger candidate evaluation
   4. Risk assessment and action recommendations
-
-Uses claude-sonnet-4-6 with prompt caching on the system context.
-System prompt includes: current regime, sentiment score, portfolio state, risk limits.
 """
 
 from __future__ import annotations
@@ -19,13 +21,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-import anthropic
-
 from app.infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
-_MODEL = "claude-sonnet-4-6"
+_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+_OPENAI_MODEL = "gpt-4o"
 _MAX_TOKENS_QA = 1024
 _MAX_TOKENS_BRIEFING = 2048
 _MAX_TOKENS_EVALUATE = 1536
@@ -98,25 +99,56 @@ class AdvisorResponse:
 
 
 class PortfolioAdvisor:
-    """Conversational AI advisor backed by Claude claude-sonnet-4-6.
-
-    Each method constructs a tailored prompt, calls the Anthropic messages API
-    with prompt-caching enabled on the system message, and parses the response
-    into a structured AdvisorResponse.
+    """Conversational AI advisor — Claude or GPT-4o, auto-detected from env vars.
 
     Usage::
 
-        advisor = PortfolioAdvisor()
+        advisor = PortfolioAdvisor()                     # auto-detect
+        advisor = PortfolioAdvisor(provider="openai")    # force GPT-4o
         response = await advisor.ask("Should I add more HDFC Bank?", context)
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
-        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not resolved_key:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        provider: str | None = None,
+    ) -> None:
+        """Initialise advisor, auto-selecting LLM provider.
+
+        Priority: Anthropic > OpenAI (unless provider="openai" is forced).
+        Pass provider="anthropic" or provider="openai" to override.
+        """
+        anthropic_key: str | None = None
+        openai_key: str | None = None
+
+        if provider == "openai":
+            openai_key = api_key or os.environ.get("OPENAI_API_KEY")
+        elif provider == "anthropic":
+            anthropic_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        else:
+            # Auto-detect: prefer Anthropic
+            anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+            if not anthropic_key:
+                openai_key = os.environ.get("OPENAI_API_KEY")
+            if api_key:
+                anthropic_key = api_key  # explicit key → treat as Anthropic
+
+        if anthropic_key:
+            import anthropic as _anthropic
+            self._client = _anthropic.AsyncAnthropic(api_key=anthropic_key)
+            self._provider = "anthropic"
+            self._model = _ANTHROPIC_MODEL
+        elif openai_key:
+            import openai as _openai
+            self._client = _openai.AsyncOpenAI(api_key=openai_key)
+            self._provider = "openai"
+            self._model = _OPENAI_MODEL
+        else:
             raise ValueError(
-                "ANTHROPIC_API_KEY environment variable is not set and no api_key was provided."
+                "No LLM API key found. Set ANTHROPIC_API_KEY (Claude) or "
+                "OPENAI_API_KEY (GPT-4o) in your environment."
             )
-        self._client = anthropic.AsyncAnthropic(api_key=resolved_key)
+        logger.info("portfolio_advisor.init", provider=self._provider, model=self._model)
 
     # ------------------------------------------------------------------
     # Public methods
@@ -381,13 +413,30 @@ class PortfolioAdvisor:
         user_content: str,
         max_tokens: int,
     ) -> str:
-        """Call the Anthropic Messages API with prompt caching on the system blocks.
+        """Dispatch to Anthropic or OpenAI backend based on self._provider."""
+        if self._provider == "anthropic":
+            return await self._call_anthropic(
+                system_blocks=system_blocks,
+                user_content=user_content,
+                max_tokens=max_tokens,
+            )
+        system_prompt = system_blocks[0]["text"] if system_blocks else ""
+        return await self._call_openai(
+            system_prompt=system_prompt,
+            user_content=user_content,
+            max_tokens=max_tokens,
+        )
 
-        Returns the raw text content of the first text block in the response.
-        Raises anthropic.APIError subclasses on failure.
-        """
+    async def _call_anthropic(
+        self,
+        *,
+        system_blocks: list[dict[str, Any]],
+        user_content: str,
+        max_tokens: int,
+    ) -> str:
+        """Call Claude via Anthropic Messages API with prompt caching."""
         message = await self._client.beta.prompt_caching.messages.create(
-            model=_MODEL,
+            model=self._model,
             max_tokens=max_tokens,
             system=system_blocks,  # type: ignore[arg-type]
             messages=[{"role": "user", "content": user_content}],
@@ -396,18 +445,44 @@ class PortfolioAdvisor:
         if usage:
             logger.info(
                 "portfolio_advisor.api_call",
-                model=_MODEL,
+                provider="anthropic",
+                model=self._model,
                 input_tokens=getattr(usage, "input_tokens", None),
                 output_tokens=getattr(usage, "output_tokens", None),
                 cache_read=getattr(usage, "cache_read_input_tokens", None),
                 cache_write=getattr(usage, "cache_creation_input_tokens", None),
             )
-
         for block in message.content:
             if block.type == "text":
                 return block.text
-
         return ""
+
+    async def _call_openai(
+        self,
+        *,
+        system_prompt: str,
+        user_content: str,
+        max_tokens: int,
+    ) -> str:
+        """Call GPT-4o via OpenAI Chat Completions API."""
+        completion = await self._client.chat.completions.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+        )
+        usage = getattr(completion, "usage", None)
+        if usage:
+            logger.info(
+                "portfolio_advisor.api_call",
+                provider="openai",
+                model=self._model,
+                input_tokens=getattr(usage, "prompt_tokens", None),
+                output_tokens=getattr(usage, "completion_tokens", None),
+            )
+        return completion.choices[0].message.content or ""
 
     def _parse_response(self, raw: str) -> AdvisorResponse:
         """Extract a structured AdvisorResponse from the raw Claude response.
