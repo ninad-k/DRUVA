@@ -4,19 +4,11 @@ Last updated: 2026-05-19
 
 ---
 
-## P1 — Frontend Navigation (quick wiring, 1-2 hours)
+## ~~P1 — Frontend Navigation~~ ✅ DONE
 
-These components are fully built but not yet linked in the sidebar / route tree.
-
-| Component | File | Where to add |
-|-----------|------|--------------|
-| AI Advisor chat panel | `frontend/src/features/ai-advisor/AiAdvisorPanel.tsx` | Sidebar nav + `/ai-advisor` route |
-| Greeks Dashboard widget | `frontend/src/features/options/GreeksDashboard.tsx` | Options page or dashboard tab |
-
-**Steps:**
-1. Add routes in `frontend/src/app/routes.tsx` (or equivalent router file).
-2. Add sidebar menu entries (icon + label) in the nav component.
-3. Wire `AiAdvisorPanel` to `GET /api/v1/ai-advisor/sentiment` on mount for initial data.
+- `/ai-advisor` route + sidebar entry wired
+- `/options/greeks` route + sidebar entry wired
+- `AiAdvisorPage.tsx` and `OptionsGreeksPage.tsx` route wrappers created
 
 ---
 
@@ -64,35 +56,18 @@ python scripts/run_walk_forward.py --data data/nifty50_2020_2026.csv \
 
 ---
 
-## P4 — WhatsApp Approval Flow
+## ~~P4 — WhatsApp Approval Flow~~ ✅ DONE
 
-**Goal:** Alternative approval channel to Telegram for portfolio managers who prefer WhatsApp.
-
-- Provider: Twilio WhatsApp API (or Meta Cloud API)
-- Trigger: Approval requests for large orders, rebalance plans, regime-driven trades
-- Flow: DRUVA sends WhatsApp message with order details → manager replies "APPROVE" / "REJECT"
-- Timeout: 15 minutes (same as Telegram TTL)
-
-**Files to create:**
-- `backend/app/core/notifications/whatsapp.py` — `WhatsAppNotifier` class
-- Wire into `ApprovalService` alongside `TelegramNotifier`
-- Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` env vars
+- `backend/app/core/notifications/whatsapp.py` — Twilio WhatsApp notifier
+- Approval request, regime alert, circuit breaker alert, daily summary message types
+- Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` to `backend/.env`
 
 ---
 
-## P5 — VaR / CVaR Portfolio Risk Dashboard
+## ~~P5 — VaR / CVaR Portfolio Risk Dashboard~~ ✅ DONE
 
-**Goal:** Show portfolio-level Value at Risk and Conditional VaR (Expected Shortfall).
-
-**Calculations:**
-- Historical VaR (95%, 99%) using 252-day rolling returns
-- CVaR (Expected Shortfall) at 95%
-- Per-position contribution to portfolio VaR
-- Sector-level VaR concentration
-
-**Files to create:**
-- `backend/app/core/risk/var_engine.py` — Historical + parametric VaR/CVaR
-- `backend/app/api/rest/v1/risk.py` — REST endpoint `GET /api/v1/risk/var`
+- `backend/app/core/risk/var_engine.py` — Historical VaR 95%/99%, CVaR, per-position contribution
+- `backend/app/api/rest/v1/risk.py` — `POST /api/v1/risk/var`, `GET /api/v1/risk/var/nifty-benchmark`
 - `frontend/src/features/risk/VaRDashboard.tsx` — VaR gauge + contribution chart
 
 ---
@@ -111,33 +86,19 @@ python scripts/run_walk_forward.py --data data/nifty50_2020_2026.csv \
 
 ---
 
-## P7 — Mobile PWA Shell
+## ~~P7 — Mobile PWA Shell~~ ✅ DONE
 
-**Goal:** Make DRUVA accessible as a Progressive Web App on iOS/Android.
-
-**Steps:**
-1. Add `frontend/public/manifest.json` with DRUVA branding (name, icons, theme_color)
-2. Register a service worker (`frontend/src/sw.ts`) for offline caching of static assets
-3. Add `<meta name="viewport">` and Apple Touch icon tags in `index.html`
-4. Test "Add to Home Screen" on Chrome Android and Safari iOS
-
-**Nice-to-have:** Push notifications for circuit-breaker alerts via Web Push API.
+- `frontend/public/manifest.json` — DRUVA amber theme, standalone display
+- `frontend/src/sw.ts` — service worker (cache-first static, network-first `/api/`)
+- `frontend/index.html` — viewport meta, Apple Touch icon tags, manifest link
 
 ---
 
-## P8 — HMM Model Retrain Schedule
+## ~~P8 — HMM Model Retrain Schedule~~ ✅ DONE
 
-**Goal:** Keep the regime detector current as market conditions evolve.
-
-**Options:**
-- **Weekly retrain** (recommended): every Sunday, fetch last 5 years of NIFTY 50 + SENSEX via yfinance, retrain, diff model output vs previous week, alert if regime has shifted.
-- **Monthly retrain**: lower compute, less responsive to regime shifts.
-- **Manual trigger**: `POST /api/v1/strategies/regime-trader/retrain` endpoint.
-
-**Files to create / update:**
-- `backend/scripts/train_regime_hmm.py` — already exists; add `--schedule weekly` flag
-- `backend/app/api/rest/v1/strategies.py` — add `retrain` endpoint (async job)
-- `backend/app/infrastructure/jobs.py` — add `regime_weekly_retrain` cron (Sunday 01:00 UTC)
+- APScheduler cron: Sunday 01:00 UTC (`regime_weekly_retrain` job in `jobs.py`)
+- On-demand endpoint: `POST /api/v1/strategies/regime-trader/retrain` (async background job)
+- `backend/app/strategies/ml/regime_trader/retrain.py` — shared `retrain_regime_hmm()` function
 
 ---
 
@@ -157,6 +118,14 @@ python scripts/run_walk_forward.py --data data/nifty50_2020_2026.csv \
 
 ## Done (this sprint)
 
+- [x] P1 Frontend nav — AI Advisor + Greeks sidebar + routes
+- [x] P3 Walk-forward backtester — 252/126/21 windows, crash injection, 3 benchmarks, CLI
+- [x] P4 WhatsApp notifier — Twilio approval flow
+- [x] P5 VaR/CVaR engine + REST + React dashboard
+- [x] P6 Monte Carlo goal projection — 1000 paths, fan chart, simulate endpoint
+- [x] P7 PWA — manifest, service worker, iOS meta tags
+- [x] P8 HMM weekly retrain — Sunday cron + on-demand REST endpoint
+- [x] P9 E2E integration tests — 8 RegimeExecutor test cases, all mocked
 - [x] HMM Regime Trader — engine + strategy + 90 tests
 - [x] India VIX fetcher + regime modifier
 - [x] Email notifier (SMTP, DRUVA-branded HTML)
