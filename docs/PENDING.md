@@ -97,7 +97,7 @@ python scripts/run_walk_forward.py --data data/nifty50_2020_2026.csv \
 
 ---
 
-## P6 — Monte Carlo Goal Projection
+## ~~P6 — Monte Carlo Goal Projection~~ ✅ DONE
 
 **Goal:** Simulate 1000+ portfolio paths to show probability of reaching a savings/corpus goal.
 
