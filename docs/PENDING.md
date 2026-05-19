@@ -38,7 +38,7 @@ These components are fully built but not yet linked in the sidebar / route tree.
 
 ---
 
-## P3 — Walk-Forward Backtester (Phase 5 of regime-trader roadmap)
+## ~~P3 — Walk-Forward Backtester~~ ✅ DONE
 
 **Goal:** Validate the HMM model on out-of-sample data using a rolling train/eval window.
 
