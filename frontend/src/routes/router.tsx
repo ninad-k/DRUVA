@@ -20,6 +20,7 @@ import { MultibaggerPage } from "@/features/multibagger/MultibaggerPage";
 import { GoalsPage } from "@/features/goals/GoalsPage";
 import { AdvisorPage } from "@/features/advisor/AdvisorPage";
 import { AiAdvisorPage } from "@/features/ai-advisor/AiAdvisorPage";
+import { CouncilPage } from "@/features/council/CouncilPage";
 import { OptionsPage } from "@/features/options/OptionsPage";
 import { OptionsGreeksPage } from "@/features/options/OptionsGreeksPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
@@ -135,6 +136,12 @@ const aiAdvisorRoute = createRoute({
   component: AiAdvisorPage,
 });
 
+const councilRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/council",
+  component: CouncilPage,
+});
+
 const optionsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/options",
@@ -182,6 +189,7 @@ const routeTree = rootRoute.addChildren([
     goalsRoute,
     advisorRoute,
     aiAdvisorRoute,
+    councilRoute,
     optionsRoute,
     optionsGreeksRoute,
     reportsRoute,

@@ -18,6 +18,7 @@ from app.api.rest.v1 import (
     ai_advisor,
     approvals,
     auth,
+    council,
     fundamentals,
     goals,
     instruments,
@@ -244,6 +245,7 @@ def create_app() -> FastAPI:
     app.include_router(options.router, prefix="/api/v1", tags=["options"])
     app.include_router(advisor.router, prefix="/api/v1/advisor", tags=["advisor"])
     app.include_router(ai_advisor.router, prefix="/api/v1/ai-advisor", tags=["ai-advisor"])
+    app.include_router(council.router, prefix="/api/v1/council", tags=["council"])
     app.include_router(scanners.router, prefix="/api/v1/scanners", tags=["scanners"])
     app.include_router(scan_results.router, prefix="/api/v1/scan-results", tags=["scanners"])
     app.include_router(fundamentals.router, prefix="/api/v1/fundamentals", tags=["fundamentals"])

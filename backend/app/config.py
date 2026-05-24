@@ -111,6 +111,17 @@ class Settings(BaseSettings):
     fundamentals_stale_days: int = 7
     screener_base_url: str = "https://www.screener.in"
 
+    # --- Pluggable fundamentals provider (Council + DCF) -------------------
+    # ``repository`` reads the local FundamentalSnapshot cache. ``http`` calls
+    # a user-supplied JSON API; ``static`` is for tests; ``null`` disables
+    # fundamentals (Council still works on ratios-only / pure reasoning).
+    fundamentals_provider: Literal[
+        "repository", "http", "static", "null"
+    ] = "repository"
+    fundamentals_http_base_url: str = ""
+    fundamentals_http_api_key: str = ""
+    fundamentals_http_timeout_s: float = 15.0
+
     # Risk caps — extends existing RiskEngine
     max_positions: int = 20
     sector_concentration_cap_pct: float = 25.0

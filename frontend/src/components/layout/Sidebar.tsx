@@ -14,6 +14,7 @@ import {
   Settings,
   Target,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { label: "Goals", to: "/goals", icon: Target },
   { label: "AI Advisor", to: "/advisor", icon: Brain },
   { label: "AI Chat Advisor", to: "/ai-advisor", icon: Bot },
+  { label: "Investor Council", to: "/council", icon: Users },
   { label: "Options", to: "/options", icon: CandlestickChart },
   { label: "Options Greeks", to: "/options/greeks", icon: Activity },
   { label: "Reports", to: "/reports", icon: FileText },
