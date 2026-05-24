@@ -39,3 +39,24 @@ copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 ```
+
+## Jesse
+
+Source: https://github.com/jesse-ai/jesse
+License: MIT
+
+The following modules adapt optimization and robustness patterns from Jesse:
+
+* `backend/app/strategies/optimization/hyperopt.py`
+* `backend/app/strategies/optimization/monte_carlo.py`
+
+## Freqtrade
+
+Source: https://github.com/freqtrade/freqtrade
+License: GPL-3.0
+
+The following modules re-implement strategy-risk patterns based on public
+Freqtrade behavior and documentation:
+
+* `backend/app/core/risk/protections/`
+* `backend/app/strategies/optimization/lookahead.py`
