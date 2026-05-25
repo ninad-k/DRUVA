@@ -87,7 +87,16 @@ class RegimeDetector:
         features = self._extract_features(ohlcv)
         logger.info("hmm.fit", rows=len(features), features=features.shape[1])
 
-        self.model.fit(features)
+        try:
+            self.model.fit(features)
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            # Degenerate data (e.g. constant price) — mark as fitted with identity remap
+            # so predict_forward can still return a neutral sequence.
+            logger.warning("hmm.fit_failed", reason=str(exc))
+            self.is_fitted = True
+            self.state_remap = {i: 2 for i in range(self.n_regimes)}  # all Neutral
+            return
+
         self.is_fitted = True
         # Sort states by mean volatility: highest vol = Crash (0), lowest = Euphoria (4)
         vol_means = self.model.means_[:, 3]
@@ -114,7 +123,11 @@ class RegimeDetector:
             raise RuntimeError("Model not fitted. Call fit() first.")
 
         features = self._extract_features(ohlcv)
-        raw = self.model.predict(features)
+        try:
+            raw = self.model.predict(features)
+        except (ValueError, np.linalg.LinAlgError):
+            # Degenerate model (e.g. from constant-price training) — return neutral
+            return np.full(len(features), self.state_remap.get(0, 2))
         return np.array([self.state_remap[int(s)] for s in raw])
 
     def predict_proba(self, ohlcv: pd.DataFrame) -> np.ndarray:
@@ -244,12 +257,15 @@ class RegimeDetector:
         volume_ma = np.where(volume_ma > 0, volume_ma, 1.0)  # Avoid log(0)
         volume_norm = np.log(volume_ma)
 
-        # Stack and replace NaNs
+        # Stack and replace NaNs / infs
         features = np.column_stack([ret_1bar, ret_5bar, ret_20bar, volatility, volume_norm])
         features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Fit or transform with scaler
+        # Fit or transform with scaler; skip transform when all features are constant
         if not self.is_fitted:
+            if np.all(features == features[0]):
+                # Constant-price edge case: scaler would divide by zero — return zeros
+                return np.zeros_like(features)
             features = self.scaler.fit_transform(features)
         else:
             features = self.scaler.transform(features)

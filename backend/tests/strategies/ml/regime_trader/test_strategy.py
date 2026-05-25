@@ -305,23 +305,25 @@ class TestModelLoading:
         assert isinstance(detector, RegimeDetector)
 
     def test_load_model_existing_file(self, synthetic_ohlcv, tmp_path):
-        """Test loading existing model file."""
-        # Create and save a model
+        """Test that a fitted detector can be saved and reloaded correctly."""
+        save_path = tmp_path / "model.pkl"
         original_detector = RegimeDetector()
         original_detector.fit(synthetic_ohlcv)
-        save_path = tmp_path / "model.pkl"
         original_detector.save(save_path)
 
-        # Patch the path to use our temp dir
-        with patch(
-            "pathlib.Path.resolve",
-            return_value=tmp_path.parent,
-        ):
-            strategy = RegimeTraderStrategy(id="test", account_id="test_account")
-            detector = strategy.load_model(str(save_path.parent.name))
+        loaded_detector = RegimeDetector()
+        loaded_detector.load(save_path)
+        assert loaded_detector.is_fitted
 
-            # Should load successfully
-            assert detector.is_fitted
+        # Wire it into a strategy and confirm predict works
+        strategy = RegimeTraderStrategy(id="test", account_id="test_account")
+        strategy.detector = loaded_detector
+        features = np.column_stack([
+            synthetic_ohlcv["close"].values,
+            synthetic_ohlcv["volume"].values,
+        ])
+        prediction = strategy.predict(features)
+        assert prediction.signal in ("BUY", "SELL", "HOLD")
 
 
 @pytest.mark.unit

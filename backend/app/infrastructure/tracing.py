@@ -16,11 +16,21 @@ Custom spans should be created via :func:`get_tracer` in business code, e.g.::
 
 from __future__ import annotations
 
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    _OTEL_AVAILABLE = True
+    try:
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        _OTLP_AVAILABLE = True
+    except ImportError:
+        _OTLP_AVAILABLE = False
+except ImportError:
+    trace = None  # type: ignore[assignment]
+    _OTEL_AVAILABLE = False
+    _OTLP_AVAILABLE = False
 
 
 def configure_tracing(
@@ -29,7 +39,9 @@ def configure_tracing(
     service_version: str,
     otlp_endpoint: str,
 ) -> None:
-    """Install a global TracerProvider with OTLP export."""
+    """Install a global TracerProvider with OTLP export. No-ops if OTel is not installed."""
+    if not _OTEL_AVAILABLE or not _OTLP_AVAILABLE:
+        return
     resource = Resource.create(
         {
             "service.name": service_name,
@@ -41,13 +53,10 @@ def configure_tracing(
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
-    # Auto-instrumentations are opt-in to keep import time fast; call these
-    # from ``main.py`` once their targets (app, engine, client) exist.
-    # Example:
-    #   from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    #   FastAPIInstrumentor.instrument_app(app)
 
-
-def get_tracer(name: str) -> trace.Tracer:
-    """Return a tracer for the given module name."""
+def get_tracer(name: str) -> "trace.Tracer":
+    """Return a tracer for the given module name, or a no-op tracer if OTel is unavailable."""
+    if not _OTEL_AVAILABLE:
+        from unittest.mock import MagicMock
+        return MagicMock()
     return trace.get_tracer(name)

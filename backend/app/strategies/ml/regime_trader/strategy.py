@@ -152,7 +152,7 @@ class RegimeTraderStrategy(MLStrategy):
         # Convert feature vector back to DataFrame for detector
         # (build_features returns raw [close, volume]; we need to reconstruct OHLCV)
         # For now, assume features is actually the full OHLCV passed from on_candle
-        if isinstance(features, np.ndarray) and features.shape[1] >= 2:
+        if isinstance(features, np.ndarray) and features.ndim >= 2 and features.shape[1] >= 2:
             close = features[:, 0]
             volume = features[:, 1]
             ohlcv = pd.DataFrame({

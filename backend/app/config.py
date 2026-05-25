@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:4173"]
     )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v: object) -> object:
+        if isinstance(v, str) and not v.startswith("["):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
 
     # --- Database -----------------------------------------------------------
     db_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/dhruva"

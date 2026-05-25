@@ -76,14 +76,20 @@ class FreqAIPipeline:
         self._bars_since_train = 0
         self._last_metrics: dict[str, float] = {}
 
+    _MIN_TRAIN_SAMPLES = 10
+
     def fit(
         self,
         candles: list[dict[str, float]],
         labels: list[int],
     ) -> dict[str, float]:
         """Train on candle history; return accuracy metrics."""
+        if len(candles) < self._MIN_TRAIN_SAMPLES:
+            return {}
         features = self._kitchen.build(candles, labels)
         window = self._data_kitchen.split(features)
+        if len(window.X_train) < 1:
+            return {}
         model = self._build_model()
         model.fit(window.X_train, window.y_train)
         self._model = model

@@ -4,7 +4,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import xgboost as xgb
+
+try:
+    import xgboost as xgb
+    _XGB_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    xgb = None  # type: ignore[assignment]
+    _XGB_AVAILABLE = False
 
 from app.infrastructure.logging import get_logger
 from app.strategies.ml.base_ml import FeatureSpec, MLStrategy, Prediction
@@ -28,8 +34,11 @@ class XGBoostSignalStrategy(MLStrategy):
 
     def load_model(self, version: str) -> Any:
         model_path = Path(__file__).resolve().parent / "models" / "xgboost_signal" / version / "model.json"
-        if not model_path.exists():
-            logger.warning("ml.model_missing", path=str(model_path))
+        if not _XGB_AVAILABLE or not model_path.exists():
+            if not _XGB_AVAILABLE:
+                logger.warning("ml.xgboost_unavailable", reason="xgboost not installed")
+            else:
+                logger.warning("ml.model_missing", path=str(model_path))
             return DummyModel()
         booster = xgb.Booster()
         booster.load_model(str(model_path))

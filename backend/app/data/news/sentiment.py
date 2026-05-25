@@ -97,16 +97,13 @@ def _build_user_prompt(item: NewsItem) -> str:
 
 def _parse_llm_response(text: str) -> tuple[float, str]:
     """Extract (score, rationale) from LLM JSON response.  Returns (0.0, '') on failure."""
-    try:
-        # Strip markdown code fences if present
-        cleaned = re.sub(r"```[a-z]*\n?|```", "", text).strip()
-        data: dict[str, Any] = json.loads(cleaned)
-        score = float(data.get("score", 0.0))
-        score = max(-1.0, min(1.0, score))
-        rationale = str(data.get("rationale", ""))
-        return score, rationale
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return 0.0, ""
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"```[a-z]*\n?|```", "", text).strip()
+    data: dict[str, Any] = json.loads(cleaned)  # raises JSONDecodeError on bad input
+    score = float(data.get("score", 0.0))
+    score = max(-1.0, min(1.0, score))
+    rationale = str(data.get("rationale", ""))
+    return score, rationale
 
 
 class NewsSentimentScorer:
