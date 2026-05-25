@@ -1,4 +1,4 @@
-"""Broker account CRUD endpoints.
+"""Broker account CRUD + broker sync endpoint.
 
 Credentials are encrypted at rest with AES-256-GCM keyed by
 ``DHRUVA_MASTER_KEY`` (same pattern as webhook tokens). Plaintext never
@@ -8,20 +8,31 @@ touches the database — decryption happens only at broker-call time inside
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_broker_factory
+from app.brokers.factory import BrokerFactory
 from app.config import get_settings
 from app.core.auth.dependencies import get_current_user
+from app.core.errors import BrokerError
 from app.db.models.account import Account
+from app.db.models.common import Exchange, ProductType
+from app.db.models.position import Position
 from app.db.models.user import User
 from app.db.session import get_session
 from app.infrastructure.encryption import encrypt
+from app.infrastructure.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -113,6 +124,10 @@ async def create_account(
 
     display_name = (payload.display_name or "").strip() or _label_for_broker(payload.broker)
 
+    # Paper accounts get their starting capital up front so the dashboard
+    # has something honest to display before any trades fill. Live accounts
+    # start at 0 — the next /sync call writes real cash from the broker.
+    starting_capital = Decimal("1000000")
     account = Account(
         user_id=user.id,
         broker_id=payload.broker,
@@ -123,8 +138,108 @@ async def create_account(
         api_secret_nonce=secret_nonce,
         is_active=True,
         is_paper=payload.is_paper,
+        paper_starting_capital=starting_capital,
+        cash_balance=starting_capital if payload.is_paper else Decimal("0"),
     )
     session.add(account)
     await session.commit()
     await session.refresh(account)
     return _to_dict(account)
+
+
+@router.post("/{account_id}/sync")
+async def sync_account(
+    account_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    factory: BrokerFactory = Depends(get_broker_factory),
+) -> dict[str, Any]:
+    """Pull current positions from the broker and upsert into the local DB.
+
+    Paper accounts: no-op (paper trades are already written through the
+    execution service when orders are placed). Live accounts: attempts a real
+    broker call. Returns a 501 if the broker adapter's OAuth handshake is not
+    yet wired — most adapters need an ``access_token`` in ``creds.extra`` that
+    only an OAuth redirect flow can produce.
+    """
+    account = await session.get(Account, account_id)
+    if account is None or account.user_id != user.id:
+        raise HTTPException(status_code=404, detail="account_not_found")
+
+    positions_count = (
+        await session.execute(select(Position).where(Position.account_id == account.id))
+    ).scalars().all()
+
+    if account.is_paper:
+        account.last_synced_at = datetime.now(UTC)
+        await session.commit()
+        return {
+            "account_id": str(account.id),
+            "synced": False,
+            "reason": "Paper account — positions update automatically when paper orders fill.",
+            "positions": len(positions_count),
+            "orders": 0,
+            "cash_balance": float(account.cash_balance),
+        }
+
+    try:
+        adapter = await factory.create(account)
+        broker_positions = await adapter.get_positions()
+        margin = await adapter.get_margin()
+    except BrokerError as exc:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                f"Broker sync not yet available for '{account.broker_id}': {exc}. "
+                "This adapter needs an OAuth handshake (access_token) before it can "
+                "fetch positions; that flow has not been wired in the UI yet."
+            ),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("account_sync_failed", account_id=str(account.id))
+        raise HTTPException(status_code=502, detail=f"broker_sync_failed: {exc}") from exc
+
+    upserted = 0
+    for bp in broker_positions:
+        try:
+            exchange = Exchange(bp.exchange)
+            product = ProductType(bp.product)
+        except ValueError:
+            logger.warning(
+                "sync.skip_position",
+                symbol=bp.symbol,
+                exchange=bp.exchange,
+                product=bp.product,
+            )
+            continue
+        stmt = pg_insert(Position).values(
+            account_id=account.id,
+            symbol=bp.symbol,
+            exchange=exchange,
+            product=product,
+            quantity=Decimal(str(bp.quantity)),
+            avg_cost=Decimal(str(bp.average_price)),
+            realized_pnl=Decimal(str(bp.pnl)),
+        )
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_position_symbol",
+            set_={
+                "quantity": stmt.excluded.quantity,
+                "avg_cost": stmt.excluded.avg_cost,
+                "realized_pnl": stmt.excluded.realized_pnl,
+            },
+        )
+        await session.execute(stmt)
+        upserted += 1
+
+    account.cash_balance = Decimal(str(margin.available_cash))
+    account.last_synced_at = datetime.now(UTC)
+    await session.commit()
+
+    return {
+        "account_id": str(account.id),
+        "synced": True,
+        "positions": upserted,
+        "orders": 0,
+        "cash_balance": float(account.cash_balance),
+    }

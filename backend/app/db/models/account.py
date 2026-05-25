@@ -26,6 +26,11 @@ class Account(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     default_product: Mapped[ProductType] = mapped_column(enum_col(ProductType, "product_type"), default=ProductType.MIS, nullable=False)
     paper_starting_capital: Mapped[Decimal] = mapped_column(Numeric(20, 4), default=Decimal("1000000"), nullable=False)
+    # Cash balance is the source of truth for dashboard equity. For paper accounts
+    # it's seeded from paper_starting_capital at create; for live accounts it's
+    # refreshed from the broker's margin call on each sync.
+    cash_balance: Mapped[Decimal] = mapped_column(Numeric(20, 4), default=Decimal("0"), nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     # Health monitor enforces the "3 consecutive failures → disable" rule. The
     # counter has to persist across scheduler runs, so it lives on the row.
     consecutive_health_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

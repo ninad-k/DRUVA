@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -13,6 +13,11 @@ from app.db.models.calendar import MarketHoliday, MarketSession
 from app.db.models.instrument import Instrument, MasterContractStatus
 from app.db.session import get_session
 
+# Default NSE regular session, used only when MarketSession is unseeded.
+# 09:15-15:30 IST → 03:45-10:00 UTC. Keep in sync with seed_market_calendar.py.
+_DEFAULT_SESSION_OPEN_UTC = time(3, 45)
+_DEFAULT_SESSION_CLOSE_UTC = time(10, 0)
+
 router = APIRouter()
 
 
@@ -23,7 +28,15 @@ async def search_instruments(
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, object]]:
-    query = select(Instrument).where(Instrument.symbol.ilike(f"%{q}%"))
+    # Prefix match scores higher than substring — typing "HDFC" should
+    # surface HDFCBANK before MFAHDFC, etc.
+    prefix = f"{q}%"
+    contains = f"%{q}%"
+    query = (
+        select(Instrument)
+        .where(Instrument.symbol.ilike(contains))
+        .order_by(Instrument.symbol.ilike(prefix).desc(), Instrument.symbol.asc())
+    )
     if exchange:
         query = query.where(Instrument.exchange == exchange)
     rows = (await session.execute(query.limit(limit))).scalars().all()
@@ -34,6 +47,10 @@ async def search_instruments(
             "exchange": str(row.exchange),
             "broker_id": row.broker_id,
             "trading_symbol": row.trading_symbol,
+            "name": (row.extra_jsonb or {}).get("name") if isinstance(row.extra_jsonb, dict) else None,
+            "segment": (row.extra_jsonb or {}).get("segment") if isinstance(row.extra_jsonb, dict) else None,
+            "instrument_type": str(row.instrument_type),
+            "lot_size": row.lot_size,
         }
         for row in rows
     ]
@@ -109,20 +126,40 @@ async def sessions(exchange: str, session: AsyncSession = Depends(get_session)) 
 
 @router.get("/calendar/is-open")
 async def is_open(exchange: str, session: AsyncSession = Depends(get_session)) -> dict[str, object]:
+    # MarketSession.open_time/close_time are seeded in UTC (see
+    # scripts/seed_market_calendar.py — NSE 09:15-15:30 IST is stored as
+    # 03:45-10:00 UTC). Compare against the UTC wall clock.
     now = datetime.now(UTC)
     holiday = await session.scalar(
         select(MarketHoliday).where(MarketHoliday.exchange == exchange, MarketHoliday.holiday_date == now.date())
     )
     if holiday is not None:
-        return {"open": False, "opens_at": None, "closes_at": None}
+        return {"is_open": False, "opens_at": None, "closes_at": None}
     rows = (
         await session.execute(
             select(MarketSession).where(MarketSession.exchange == exchange, MarketSession.weekday == now.weekday())
         )
     ).scalars().all()
+    # Dev fallback: if MarketSession isn't seeded for this exchange/weekday, use
+    # the default NSE regular session (Mon-Fri 09:15-15:30 IST). Run
+    # scripts/seed_market_calendar.py in production for accurate sessions.
+    if not rows:
+        is_weekday = now.weekday() < 5
+        now_t = now.time().replace(tzinfo=None)
+        within_hours = _DEFAULT_SESSION_OPEN_UTC <= now_t <= _DEFAULT_SESSION_CLOSE_UTC
+        if is_weekday and within_hours:
+            opens_at = datetime.combine(now.date(), _DEFAULT_SESSION_OPEN_UTC, tzinfo=UTC)
+            closes_at = datetime.combine(now.date(), _DEFAULT_SESSION_CLOSE_UTC, tzinfo=UTC)
+            return {
+                "is_open": True,
+                "opens_at": opens_at.isoformat(),
+                "closes_at": closes_at.isoformat(),
+            }
+        return {"is_open": False, "opens_at": None, "closes_at": None}
+    now_t = now.time().replace(tzinfo=None)
     for row in rows:
-        if row.open_time <= now.time().replace(tzinfo=None) <= row.close_time:
+        if row.open_time <= now_t <= row.close_time:
             opens_at = datetime.combine(now.date(), row.open_time, tzinfo=UTC)
             closes_at = datetime.combine(now.date(), row.close_time, tzinfo=UTC)
-            return {"open": True, "opens_at": opens_at.isoformat(), "closes_at": closes_at.isoformat()}
-    return {"open": False, "opens_at": None, "closes_at": None}
+            return {"is_open": True, "opens_at": opens_at.isoformat(), "closes_at": closes_at.isoformat()}
+    return {"is_open": False, "opens_at": None, "closes_at": None}

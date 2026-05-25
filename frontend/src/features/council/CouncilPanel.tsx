@@ -11,6 +11,8 @@
 
 import { useEffect, useState } from "react";
 
+import { SymbolPicker, type PickedSymbol } from "./SymbolPicker";
+
 const API_BASE = "/api/v1/council";
 
 type PersonaOut = {
@@ -61,7 +63,7 @@ const SIGNAL_BG: Record<string, string> = {
 };
 
 export function CouncilPanel() {
-  const [symbol, setSymbol] = useState("");
+  const [picked, setPicked] = useState<PickedSymbol | null>(null);
   const [question, setQuestion] = useState(
     "Should we own this stock in the current market regime?",
   );
@@ -82,8 +84,8 @@ export function CouncilPanel() {
   }, []);
 
   async function run() {
-    if (!symbol.trim()) {
-      setError("Enter a symbol first (e.g. RELIANCE).");
+    if (!picked) {
+      setError("Pick a symbol first — start typing to search NSE/BSE instruments.");
       return;
     }
     setLoading(true);
@@ -94,8 +96,8 @@ export function CouncilPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          symbol: symbol.trim().toUpperCase(),
-          exchange: "NSE",
+          symbol: picked.symbol,
+          exchange: picked.exchange,
           question,
           personas: Array.from(selected),
         }),
@@ -134,12 +136,10 @@ export function CouncilPanel() {
 
       {/* Inputs */}
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr_auto]">
-        <input
-          type="text"
-          placeholder="Symbol (e.g. RELIANCE)"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+        <SymbolPicker
+          value={picked}
+          onChange={setPicked}
+          placeholder="Symbol (e.g. HDFCBANK)"
         />
         <input
           type="text"
@@ -150,7 +150,7 @@ export function CouncilPanel() {
         />
         <button
           onClick={run}
-          disabled={loading}
+          disabled={loading || !picked}
           className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
         >
           {loading ? "Asking…" : "Convene Council"}

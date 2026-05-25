@@ -247,3 +247,30 @@ export interface FreqAIStatus {
   feature_count: number;
   model_dir: string;
 }
+
+export interface AnalyticsSummary {
+  total_equity: number;
+  cash_balance: number;
+  holdings_value: number;
+  day_pnl: number;
+  day_pnl_pct: number;
+  open_positions: number;
+  total_positions: number;
+  active_strategies: number;
+  total_strategies: number;
+  last_synced_at: string | null;
+}
+
+export interface EquityPointApi {
+  ts: string;
+  equity: number;
+}
+
+export interface AccountSyncResult {
+  account_id: UUID;
+  synced: boolean;
+  reason?: string;
+  positions: number;
+  orders: number;
+  cash_balance?: number;
+}

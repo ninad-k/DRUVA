@@ -25,17 +25,21 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
+from datetime import time as dtime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth.password import PasswordService
 from app.db.models.account import Account
+from app.db.models.calendar import MarketSession
 from app.db.models.common import (
     Exchange,
     OrderSide,
     OrderStatus,
     OrderType,
     ProductType,
+    SessionType,
     StrategyMode,
 )
 from app.db.models.goal import GoalStatus, InvestmentGoal, SipSchedule
@@ -375,9 +379,37 @@ async def _seed_scanner(session: AsyncSession, account: Account) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _seed_market_calendar(session: AsyncSession) -> None:
+    """Seed NSE/BSE regular sessions if the table is empty.
+
+    Times are stored in UTC (09:15-15:30 IST → 03:45-10:00 UTC) — matches
+    scripts/seed_market_calendar.py. Without these rows the dashboard's
+    "NSE Open / NSE Closed" badge defaults to closed.
+    """
+    existing = await session.scalar(select(MarketSession).limit(1))
+    if existing is not None:
+        logger.info("seed.market_sessions_exist")
+        return
+    sessions_open = dtime(3, 45)
+    sessions_close = dtime(10, 0)
+    for exchange in (Exchange.NSE, Exchange.BSE):
+        for weekday in range(5):  # Mon-Fri
+            session.add(
+                MarketSession(
+                    exchange=exchange,
+                    weekday=weekday,
+                    open_time=sessions_open,
+                    close_time=sessions_close,
+                    session_type=SessionType.REGULAR,
+                )
+            )
+    logger.info("seed.market_sessions_created")
+
+
 async def seed() -> None:
     async with SessionLocal() as session:
         async with session.begin():
+            await _seed_market_calendar(session)
             user = await _get_or_create_user(session)
             account = await _get_or_create_account(session, user)
             await _seed_watchlist(session, account)

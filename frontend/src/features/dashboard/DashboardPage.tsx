@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDownRight,
@@ -7,8 +7,10 @@ import {
   Briefcase,
   LineChart,
   Plus,
+  RefreshCw,
   Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +19,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listOrders, listPositions, listStrategies } from "@/api/rest/endpoints";
+import {
+  getAnalyticsSummary,
+  getEquityCurve,
+  listOrders,
+  syncAccount,
+} from "@/api/rest/endpoints";
 import { useAccountStore } from "@/store/account";
 import { formatDateTime, formatINR, formatPct, formatSignedINR, pnlColorClass } from "@/utils/format";
 
@@ -59,43 +66,64 @@ function KpiCard({ title, value, delta, icon }: KpiCardProps) {
   );
 }
 
-function generateMockEquity(points = 60): EquityPoint[] {
-  const out: EquityPoint[] = [];
-  let v = 1_000_000;
-  const now = Date.now();
-  for (let i = points - 1; i >= 0; i--) {
-    v += (Math.random() - 0.45) * 8_000;
-    out.push({ ts: new Date(now - i * 86_400_000).toISOString().slice(5, 10), equity: v });
-  }
-  return out;
-}
-
 export function DashboardPage() {
   const accountId = useAccountStore((s) => s.activeAccountId);
+  const qc = useQueryClient();
 
   const ordersQ = useQuery({
     queryKey: ["dashboard-orders", accountId],
     queryFn: () => listOrders(accountId ? { account_id: accountId } : {}),
     refetchInterval: 15_000,
+    enabled: !!accountId,
   });
 
-  const positionsQ = useQuery({
-    queryKey: ["dashboard-positions", accountId],
-    queryFn: () => listPositions(accountId ? { account_id: accountId } : {}),
+  const summaryQ = useQuery({
+    queryKey: ["analytics-summary", accountId],
+    queryFn: () => getAnalyticsSummary(accountId!),
     refetchInterval: 10_000,
+    enabled: !!accountId,
   });
 
-  const strategiesQ = useQuery({
-    queryKey: ["dashboard-strategies", accountId],
-    queryFn: () => listStrategies(accountId ? { account_id: accountId } : {}),
+  const equityQ = useQuery({
+    queryKey: ["analytics-equity-curve", accountId],
+    queryFn: () => getEquityCurve(accountId!, 60),
+    refetchInterval: 60_000,
+    enabled: !!accountId,
   });
 
-  const equityData = useMemo(() => generateMockEquity(60), []);
+  const sync = useMutation({
+    mutationFn: () => syncAccount(accountId!),
+    onSuccess: (res) => {
+      if (res.synced) {
+        toast.success(`Synced ${res.positions} positions and ${res.orders} orders`);
+      } else {
+        toast.info(res.reason ?? "Nothing to sync for this account");
+      }
+      qc.invalidateQueries({ queryKey: ["analytics-summary", accountId] });
+      qc.invalidateQueries({ queryKey: ["analytics-equity-curve", accountId] });
+      qc.invalidateQueries({ queryKey: ["dashboard-orders", accountId] });
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail ?? "Sync failed");
+    },
+  });
 
-  const totalPnl = (positionsQ.data ?? []).reduce((acc, p) => acc + (p.pnl ?? 0), 0);
-  const openPositions = (positionsQ.data ?? []).length;
-  const activeStrategies = (strategiesQ.data ?? []).filter((s) => s.enabled).length;
-  const totalEquity = equityData.length ? equityData[equityData.length - 1].equity : 0;
+  const equityData: EquityPoint[] = useMemo(
+    () =>
+      (equityQ.data ?? []).map((p) => ({
+        ts: p.ts.slice(5, 10),
+        equity: p.equity,
+      })),
+    [equityQ.data],
+  );
+
+  const totalEquity = summaryQ.data?.total_equity ?? 0;
+  const dayPnl = summaryQ.data?.day_pnl ?? 0;
+  const dayPnlPct = summaryQ.data?.day_pnl_pct ?? 0;
+  const openPositions = summaryQ.data?.open_positions ?? 0;
+  const activeStrategies = summaryQ.data?.active_strategies ?? 0;
+  const totalStrategies = summaryQ.data?.total_strategies ?? 0;
 
   const recentOrders = (ordersQ.data ?? []).slice(0, 10);
 
@@ -104,19 +132,32 @@ export function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Live view of your accounts, P&L, and strategies."
+        actions={
+          accountId ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+            >
+              <RefreshCw className={`h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} />
+              Sync
+            </Button>
+          ) : null
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Total Equity"
           value={formatINR(totalEquity, { compact: true })}
-          delta={{ value: 1.42, label: "+1.42% today" }}
+          delta={{ value: dayPnlPct, label: `${formatPct(dayPnlPct)} today` }}
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiCard
           title="Day P&L"
-          value={formatSignedINR(totalPnl)}
-          delta={{ value: totalPnl, label: formatPct((totalPnl / Math.max(totalEquity, 1)) * 100) }}
+          value={formatSignedINR(dayPnl)}
+          delta={{ value: dayPnl, label: formatPct(dayPnlPct) }}
           icon={<LineChart className="h-4 w-4" />}
         />
         <KpiCard
@@ -126,7 +167,7 @@ export function DashboardPage() {
         />
         <KpiCard
           title="Active Strategies"
-          value={`${activeStrategies} / ${(strategiesQ.data ?? []).length}`}
+          value={`${activeStrategies} / ${totalStrategies}`}
           icon={<LineChart className="h-4 w-4" />}
         />
       </div>
@@ -136,10 +177,21 @@ export function DashboardPage() {
           <CardTitle>Equity Curve</CardTitle>
         </CardHeader>
         <CardContent>
-          <EquityCurveChart data={equityData} height={280} />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Sample data. Live wiring requires the analytics endpoint.
-          </p>
+          {equityQ.isLoading ? (
+            <Skeleton className="h-[280px] w-full" />
+          ) : equityData.length === 0 ? (
+            <EmptyState
+              icon={LineChart}
+              title={accountId ? "No equity history yet" : "Select an account"}
+              description={
+                accountId
+                  ? "Place trades or run strategies to start building your equity curve."
+                  : "Add a broker account from Settings to begin."
+              }
+            />
+          ) : (
+            <EquityCurveChart data={equityData} height={280} />
+          )}
         </CardContent>
       </Card>
 

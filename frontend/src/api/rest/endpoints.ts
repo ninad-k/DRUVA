@@ -5,10 +5,13 @@
  */
 import { rest } from "./axios";
 import type {
+  AccountSyncResult,
+  AnalyticsSummary,
   Approval,
   AuthTokens,
   BrokerAccount,
   CalendarEvent,
+  EquityPointApi,
   FreqAIStatus,
   InstrumentSearchResult,
   IvSmilePoint,
@@ -298,6 +301,31 @@ function labelForBroker(broker: BrokerAccount["broker"]): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+// ---------- Analytics ----------
+export async function getAnalyticsSummary(accountId: string): Promise<AnalyticsSummary> {
+  const { data } = await rest.get<AnalyticsSummary>(`${BASE}/analytics/summary`, {
+    params: { account_id: accountId },
+  });
+  return data;
+}
+
+export async function getEquityCurve(
+  accountId: string,
+  days = 60,
+): Promise<EquityPointApi[]> {
+  const { data } = await rest.get<EquityPointApi[]>(`${BASE}/analytics/equity-curve`, {
+    params: { account_id: accountId, days },
+  });
+  return Array.isArray(data) ? data : [];
+}
+
+export async function syncAccount(accountId: string): Promise<AccountSyncResult> {
+  const { data } = await rest.post<AccountSyncResult>(
+    `${BASE}/accounts/${accountId}/sync`,
+  );
+  return data;
 }
 
 // ---------- Scanner ----------
