@@ -17,6 +17,7 @@ from app.api.rest.v1 import (
     accounts,
     advisor,
     ai_advisor,
+    analytics,
     approvals,
     auth,
     calendar,
@@ -221,7 +222,7 @@ def create_app() -> FastAPI:
     async def live() -> dict[str, str]:
         return {"status": "live"}
 
-    @app.get("/health/ready", tags=["health"])
+    @app.get("/health/ready", tags=["health"], response_model=None)
     async def ready(session: AsyncSession = Depends(get_session)) -> Response | dict[str, object]:
         redis = None
         async for client in get_redis():
@@ -243,6 +244,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
     app.include_router(accounts.router, prefix="/api/v1/accounts", tags=["accounts"])
+    app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
     app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
     app.include_router(approvals.router, prefix="/api/v1/approvals", tags=["approvals"])
     app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])

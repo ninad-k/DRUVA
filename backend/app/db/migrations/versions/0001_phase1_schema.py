@@ -30,11 +30,17 @@ def upgrade() -> None:
     op.execute("SELECT create_hypertable('ohlcv_candles', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '7 days');")
     op.execute("SELECT create_hypertable('order_events', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '7 days');")
     op.execute("SELECT create_hypertable('pnl_snapshots', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '7 days');")
+    # asyncpg uses prepared statements which reject multi-statement strings;
+    # split the function and trigger into separate op.execute calls.
     op.execute(
         """
         CREATE OR REPLACE FUNCTION audit_events_no_update_delete() RETURNS trigger AS $$
         BEGIN RAISE EXCEPTION 'audit_events is append-only'; END;
         $$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER audit_events_immutable
         BEFORE UPDATE OR DELETE ON audit_events
         FOR EACH ROW EXECUTE FUNCTION audit_events_no_update_delete();

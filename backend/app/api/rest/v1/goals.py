@@ -16,7 +16,7 @@ from app.api.dependencies import get_approval_service
 from app.core.auth.dependencies import get_current_user
 from app.core.execution.approval_service import ApprovalService
 from app.core.portfolio.goal_tracker import GoalTracker
-from app.core.portfolio.sip_engine import SipEngine
+from app.core.portfolio.sip_engine import SIPEngine
 from app.db.models.goal import (
     GoalStatus,
     InvestmentGoal,
@@ -133,7 +133,7 @@ async def create_stp(
     session: AsyncSession = Depends(get_session),
     approval_service: ApprovalService = Depends(get_approval_service),
 ) -> dict[str, Any]:
-    engine = SipEngine(session=session, approval_service=approval_service)
+    engine = SIPEngine(session=session, approval_service=approval_service)
     sch = await engine.create_stp_plan(
         goal_id=goal_id,
         lump_sum=Decimal(str(payload.lump_sum)),

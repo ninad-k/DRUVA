@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,13 +147,13 @@ async def add_watchlist(
     )
 
 
-@router.delete("/watchlist/{watchlist_id}", status_code=204)
+@router.delete("/watchlist/{watchlist_id}", status_code=204, response_class=Response)
 async def delete_watchlist(
     watchlist_id: UUID,
     request: Request,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> None:
+) -> Response:
     settings = get_settings()
     http = None
     async for c in get_http_client():
@@ -164,6 +164,7 @@ async def delete_watchlist(
         fallback_llm=fallback_llm_from_settings(settings),
     )
     await svc.remove_from_watchlist(user_id=user.id, watchlist_id=watchlist_id)
+    return Response(status_code=204)
 
 
 # ---------- Runs + Scores -----------------------------------------------
