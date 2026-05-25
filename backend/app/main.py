@@ -14,6 +14,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.rest.v1 import (
+    accounts,
     advisor,
     ai_advisor,
     approvals,
@@ -241,6 +242,7 @@ def create_app() -> FastAPI:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+    app.include_router(accounts.router, prefix="/api/v1/accounts", tags=["accounts"])
     app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
     app.include_router(approvals.router, prefix="/api/v1/approvals", tags=["approvals"])
     app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])
