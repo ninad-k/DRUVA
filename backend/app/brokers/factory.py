@@ -8,6 +8,7 @@ from app.brokers.base import BrokerAdapter, BrokerCredentials
 from app.brokers.dhan import DhanAdapter
 from app.brokers.five_paisa import FivePaisaAdapter
 from app.brokers.fyers import FyersAdapter
+from app.brokers.groww import GrowwAdapter
 from app.brokers.kotak_neo import KotakNeoAdapter
 from app.brokers.latency_wrapper import LatencyRecorder, LatencyRecordingAdapter
 from app.brokers.paper import PaperBroker
@@ -34,6 +35,7 @@ class BrokerFactory:
             "five_paisa": FivePaisaAdapter,
             "alice_blue": AliceBlueAdapter,
             "angel_one": AngelOneAdapter,
+            "groww": GrowwAdapter,
             "kotak_neo": KotakNeoAdapter,
             "shoonya": ShoonyaAdapter,
             "flattrade": ShoonyaAdapter,  # NorenAPI clone

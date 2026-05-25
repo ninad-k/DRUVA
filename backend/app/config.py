@@ -122,6 +122,32 @@ class Settings(BaseSettings):
     fundamentals_http_api_key: str = ""
     fundamentals_http_timeout_s: float = 15.0
 
+    # --- Pluggable calendar provider (Phase H) --------------------------------
+    # ``null`` disables the calendar (default). ``http`` calls a user-supplied
+    # REST API; ``static`` returns an empty list (seed via code for demos).
+    calendar_provider: Literal["null", "static", "http"] = "null"
+    calendar_http_base_url: str = ""
+    calendar_http_api_key: str = ""
+    calendar_http_timeout_s: float = 15.0
+
+    # --- Pluggable news provider (Phase I) ------------------------------------
+    news_provider: Literal["null", "static", "http"] = "null"
+    news_http_base_url: str = ""
+    news_http_api_key: str = ""
+    news_http_timeout_s: float = 15.0
+    news_sentiment_llm_enabled: bool = False
+
+    # --- FreqAI adaptive ML pipeline (Phase L) --------------------------------
+    # When enabled, FreqAIStrategy trains and predicts alongside (or instead of)
+    # the HMM regime detector.  Set freqai_model_kind to switch the learner.
+    freqai_enabled: bool = False
+    freqai_model_kind: Literal[
+        "random_forest", "gradient_boost", "logistic"
+    ] = "random_forest"
+    freqai_retrain_every: int = 100
+    freqai_label_threshold: float = 0.001
+    freqai_model_dir: str = ""   # absolute path; empty = no persistence
+
     # Risk caps — extends existing RiskEngine
     max_positions: int = 20
     sector_concentration_cap_pct: float = 25.0

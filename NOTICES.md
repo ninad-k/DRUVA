@@ -49,6 +49,8 @@ The following modules adapt optimization and robustness patterns from Jesse:
 
 * `backend/app/strategies/optimization/hyperopt.py`
 * `backend/app/strategies/optimization/monte_carlo.py`
+* `backend/app/core/indicators/numpy_impl.py` — indicator formulas adapted
+  from Jesse's indicator library (all standard TA formulas reimplemented).
 
 ## Freqtrade
 
@@ -58,5 +60,11 @@ License: GPL-3.0
 The following modules re-implement strategy-risk patterns based on public
 Freqtrade behavior and documentation:
 
-* `backend/app/core/risk/protections/`
+* `backend/app/core/risk/protections/` — CooldownPeriod, StoplossGuard,
+  MaxDrawdownProtection, LowProfitPairs, ProtectionManager. Pattern adapted
+  from Freqtrade's protections framework; no verbatim copy.
 * `backend/app/strategies/optimization/lookahead.py`
+* `backend/app/strategies/ml/freq_ai/` — FreqAI-inspired adaptive ML pipeline
+  (FeatureKitchen, DataKitchen, FreqAIPipeline, FreqAIStrategy). Conceptual
+  architecture adapted from FreqAI's rolling-window training design; no
+  verbatim copy.

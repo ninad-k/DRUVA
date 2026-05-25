@@ -19,9 +19,13 @@ from app.core.advisor.personas.buffett import WARREN_BUFFETT
 from app.core.advisor.personas.burry import MICHAEL_BURRY
 from app.core.advisor.personas.damodaran import ASWATH_DAMODARAN
 from app.core.advisor.personas.druckenmiller import STANLEY_DRUCKENMILLER
+from app.core.advisor.personas.graham import BENJAMIN_GRAHAM
 from app.core.advisor.personas.jhunjhunwala import RAKESH_JHUNJHUNWALA
+from app.core.advisor.personas.klarman import SETH_KLARMAN
 from app.core.advisor.personas.lynch import PETER_LYNCH
+from app.core.advisor.personas.marks import HOWARD_MARKS
 from app.core.advisor.personas.munger import CHARLIE_MUNGER
+from app.core.advisor.personas.rajan import RAGHURAM_RAJAN
 
 # Ensure module-level personas are registered.
 for _p in (
@@ -32,6 +36,10 @@ for _p in (
     RAKESH_JHUNJHUNWALA,
     MICHAEL_BURRY,
     STANLEY_DRUCKENMILLER,
+    BENJAMIN_GRAHAM,
+    SETH_KLARMAN,
+    HOWARD_MARKS,
+    RAGHURAM_RAJAN,
 ):
     register_persona(_p)
 
@@ -49,4 +57,8 @@ __all__ = [
     "RAKESH_JHUNJHUNWALA",
     "MICHAEL_BURRY",
     "STANLEY_DRUCKENMILLER",
+    "BENJAMIN_GRAHAM",
+    "SETH_KLARMAN",
+    "HOWARD_MARKS",
+    "RAGHURAM_RAJAN",
 ]
