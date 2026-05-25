@@ -13,7 +13,7 @@ import { apiLogin, apiMe } from "@/api/rest/endpoints";
 import { useAuthStore } from "@/store/auth";
 
 const schema = z.object({
-  email: z.string().email("Enter a valid email"),
+  username: z.string().min(1, "Enter your username"),
   password: z.string().min(6, "At least 6 characters"),
 });
 
@@ -30,7 +30,7 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { username: "", password: "" },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -69,10 +69,10 @@ export function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" autoComplete="email" {...register("email")} />
-              {errors.email && (
-                <p className="text-xs text-[hsl(var(--loss))]">{errors.email.message}</p>
+              <Label htmlFor="username">Username</Label>
+              <Input id="username" autoComplete="username" {...register("username")} />
+              {errors.username && (
+                <p className="text-xs text-[hsl(var(--loss))]">{errors.username.message}</p>
               )}
             </div>
             <div className="space-y-1.5">

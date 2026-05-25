@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -36,11 +36,25 @@ class AuthService:
         self._tokens = token_service
         self._settings = get_settings()
 
-    async def register(self, email: str, password: str, display_name: str) -> User:
+    async def register(
+        self,
+        email: str,
+        password: str,
+        display_name: str,
+        username: str | None = None,
+    ) -> User:
+        normalized_username = username.lower() if username else None
         existing = await self._session.scalar(select(User).where(User.email == email.lower()))
         if existing:
             raise ValidationError("email_already_registered")
+        if normalized_username:
+            existing_username = await self._session.scalar(
+                select(User).where(User.username == normalized_username)
+            )
+            if existing_username:
+                raise ValidationError("username_already_registered")
         user = User(
+            username=normalized_username,
             email=email.lower(),
             password_hash=self._password.hash(password),
             display_name=display_name,
@@ -50,8 +64,11 @@ class AuthService:
         await self._session.refresh(user)
         return user
 
-    async def login(self, email: str, password: str) -> TokenPair:
-        user = await self._session.scalar(select(User).where(User.email == email.lower()))
+    async def login(self, identifier: str, password: str) -> TokenPair:
+        normalized = identifier.lower()
+        user = await self._session.scalar(
+            select(User).where(or_(User.email == normalized, User.username == normalized))
+        )
         if not user or not self._password.verify(password, user.password_hash):
             raise UnauthorizedError("invalid_credentials")
         return await self._issue_token_pair(user.id)

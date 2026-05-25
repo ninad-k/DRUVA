@@ -86,6 +86,8 @@ grafana_data/
 logs/
 *.log
 reports/
+!frontend/src/features/reports/
+!frontend/src/features/reports/**
 *.pdf
 *.xlsx
 tmp/

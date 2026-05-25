@@ -26,6 +26,7 @@ const BASE = "/v1";
 
 // ---------- Auth ----------
 export async function apiRegister(input: {
+  username?: string;
   email: string;
   password: string;
   display_name: string;
@@ -34,7 +35,8 @@ export async function apiRegister(input: {
 }
 
 export async function apiLogin(input: {
-  email: string;
+  username?: string;
+  email?: string;
   password: string;
 }): Promise<AuthTokens> {
   const { data } = await rest.post<AuthTokens>(`${BASE}/auth/login`, input);

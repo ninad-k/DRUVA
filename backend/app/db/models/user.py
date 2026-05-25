@@ -14,6 +14,7 @@ from app.db.models.common import TimestampMixin, UUIDPrimaryKeyMixin
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "users"
 
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)

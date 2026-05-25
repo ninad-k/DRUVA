@@ -12,13 +12,14 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, service: AuthService = Depends(get_auth_service)) -> UserResponse:
-    user = await service.register(payload.email, payload.password, payload.display_name)
+    user = await service.register(payload.email, payload.password, payload.display_name, payload.username)
     return UserResponse.model_validate(user, from_attributes=True)
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
-    tokens = await service.login(payload.email, payload.password)
+    identifier = payload.username or str(payload.email)
+    tokens = await service.login(identifier, payload.password)
     return TokenResponse(**tokens.__dict__)
 
 

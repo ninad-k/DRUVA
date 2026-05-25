@@ -9,6 +9,7 @@ export type ISO8601 = string;
 
 export interface User {
   id: UUID;
+  username?: string;
   email: string;
   display_name: string;
   created_at: ISO8601;
