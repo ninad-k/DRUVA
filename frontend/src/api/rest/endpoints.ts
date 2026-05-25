@@ -8,8 +8,11 @@ import type {
   Approval,
   AuthTokens,
   BrokerAccount,
+  CalendarEvent,
+  FreqAIStatus,
   InstrumentSearchResult,
   IvSmilePoint,
+  NewsItem,
   OiProfilePoint,
   OptionChain,
   Order,
@@ -192,6 +195,16 @@ export async function isMarketOpen(exchange: string): Promise<{ is_open: boolean
     params: { exchange },
   });
   return data;
+}
+
+export async function listCalendarEvents(params: {
+  since?: string;
+  until?: string;
+  symbol?: string;
+  kinds?: string;
+} = {}): Promise<CalendarEvent[]> {
+  const { data } = await rest.get<CalendarEvent[]>(`${BASE}/calendar/events`, { params });
+  return Array.isArray(data) ? data : [];
 }
 
 // ---------- Options ----------
@@ -748,4 +761,28 @@ export async function pauseGoal(id: string): Promise<Goal> {
 export async function resumeGoal(id: string): Promise<Goal> {
   const { data } = await rest.post<Goal>(`${BASE}/goals/${id}/resume`);
   return data;
+}
+
+// ---------- News ----------
+export async function listLatestNews(params: {
+  limit?: number;
+  symbol?: string;
+  since?: string;
+} = {}): Promise<NewsItem[]> {
+  const { data } = await rest.get<NewsItem[]>(`${BASE}/news/latest`, { params });
+  return Array.isArray(data) ? data : [];
+}
+
+export async function refreshNews(): Promise<void> {
+  await rest.post(`${BASE}/news/refresh`);
+}
+
+// ---------- FreqAI ----------
+export async function getFreqAIStatus(): Promise<FreqAIStatus> {
+  const { data } = await rest.get<FreqAIStatus>(`${BASE}/freqai/status`);
+  return data;
+}
+
+export async function triggerFreqAIRetrain(): Promise<void> {
+  await rest.post(`${BASE}/freqai/retrain`);
 }

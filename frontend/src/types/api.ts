@@ -199,3 +199,51 @@ export interface WebhookSource {
   created_at: ISO8601;
   revoked_at?: ISO8601;
 }
+
+export type CalendarEventKind =
+  | "rbi_policy"
+  | "earnings"
+  | "dividend_ex_date"
+  | "bonus"
+  | "split"
+  | "agm"
+  | "fno_expiry"
+  | "index_rebalance"
+  | "ipo"
+  | "buyback"
+  | "result_announcement"
+  | "circuit_filter_change";
+
+export interface CalendarEvent {
+  event_id: string;
+  kind: CalendarEventKind;
+  occurs_on: string;
+  symbol: string | null;
+  exchange: string | null;
+  title: string;
+  detail?: string;
+  source?: string;
+}
+
+export interface NewsItem {
+  item_id: string;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  published_at: ISO8601;
+  symbols: string[];
+  sentiment_score: number | null;
+  sentiment_label: "negative" | "neutral" | "positive" | null;
+}
+
+export interface FreqAIStatus {
+  enabled: boolean;
+  model_kind: string;
+  last_retrain_at: ISO8601 | null;
+  next_retrain_in_bars: number | null;
+  train_accuracy: number | null;
+  test_accuracy: number | null;
+  feature_count: number;
+  model_dir: string;
+}

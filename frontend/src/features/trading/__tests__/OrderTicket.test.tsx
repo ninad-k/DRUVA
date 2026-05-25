@@ -58,7 +58,7 @@ describe("OrderTicket", () => {
     vi.clearAllMocks();
     // Default: a valid account is selected
     const { useAccountStore } = await import("@/store/account");
-    (useAccountStore as ReturnType<typeof vi.fn>).mockReturnValue("account-id-123");
+    (useAccountStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue("account-id-123");
   });
 
   it("renders the sheet with Place Order heading", () => {
@@ -99,7 +99,6 @@ describe("OrderTicket", () => {
   });
 
   it("shows price field when order type is LIMIT", async () => {
-    const user = userEvent.setup();
     renderTicket({ defaults: { order_type: "LIMIT" } });
     // price label should be visible now
     await waitFor(() => {
@@ -121,7 +120,7 @@ describe("OrderTicket", () => {
   it("submit button is disabled when no account is selected", async () => {
     const { useAccountStore } = await import("@/store/account");
     // Override to null for this test only
-    (useAccountStore as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    (useAccountStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue(null);
 
     const client = makeClient();
     render(

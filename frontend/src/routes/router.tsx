@@ -26,6 +26,9 @@ import { OptionsGreeksPage } from "@/features/options/OptionsGreeksPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { AccountsPage } from "@/features/settings/AccountsPage";
 import { NotificationsPage } from "@/features/settings/NotificationsPage";
+import { CalendarPage } from "@/features/calendar/CalendarPage";
+import { NewsPage } from "@/features/news/NewsPage";
+import { FreqAIPage } from "@/features/freqai/FreqAIPage";
 import { useAuthStore } from "@/store/auth";
 import { useAuthBootstrap } from "@/features/auth/useAuth";
 
@@ -172,6 +175,24 @@ const settingsNotificationsRoute = createRoute({
   component: NotificationsPage,
 });
 
+const calendarRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/calendar",
+  component: CalendarPage,
+});
+
+const newsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/news",
+  component: NewsPage,
+});
+
+const freqaiRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/freqai",
+  component: FreqAIPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -195,6 +216,9 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     settingsAccountsRoute,
     settingsNotificationsRoute,
+    calendarRoute,
+    newsRoute,
+    freqaiRoute,
   ]),
 ]);
 
