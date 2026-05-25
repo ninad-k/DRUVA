@@ -226,8 +226,13 @@ export async function getIvSmile(params: {
 
 // ---------- Accounts ----------
 export async function listAccounts(): Promise<BrokerAccount[]> {
-  const { data } = await rest.get<BrokerAccount[]>(`${BASE}/accounts`);
-  return Array.isArray(data) ? data : (data as { items?: BrokerAccount[] })?.items ?? [];
+  try {
+    const { data } = await rest.get<BrokerAccount[]>(`${BASE}/accounts`);
+    return Array.isArray(data) ? data : (data as { items?: BrokerAccount[] })?.items ?? [];
+  } catch (err) {
+    if (canUseDevAccountFallback(err)) return readDevAccounts();
+    throw err;
+  }
 }
 
 export async function createAccount(input: {
@@ -237,8 +242,49 @@ export async function createAccount(input: {
   api_secret: string;
   is_paper: boolean;
 }): Promise<BrokerAccount> {
-  const { data } = await rest.post<BrokerAccount>(`${BASE}/accounts`, input);
-  return data;
+  try {
+    const { data } = await rest.post<BrokerAccount>(`${BASE}/accounts`, input);
+    return data;
+  } catch (err) {
+    if (!canUseDevAccountFallback(err)) throw err;
+    const account: BrokerAccount = {
+      id: crypto.randomUUID(),
+      broker: input.broker,
+      display_name: input.display_name?.trim() || labelForBroker(input.broker),
+      is_paper: input.is_paper,
+      is_connected: true,
+      created_at: new Date().toISOString(),
+    };
+    const accounts = [...readDevAccounts(), account];
+    localStorage.setItem(DEV_ACCOUNTS_KEY, JSON.stringify(accounts));
+    return account;
+  }
+}
+
+const DEV_ACCOUNTS_KEY = "dhruva.dev.accounts";
+
+function canUseDevAccountFallback(err: unknown): boolean {
+  if (!import.meta.env.DEV) return false;
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return !status || status === 404 || status >= 500;
+}
+
+function readDevAccounts(): BrokerAccount[] {
+  const raw = localStorage.getItem(DEV_ACCOUNTS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as BrokerAccount[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function labelForBroker(broker: BrokerAccount["broker"]): string {
+  return broker
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 // ---------- Scanner ----------

@@ -98,7 +98,12 @@ export function AccountsPage() {
       setOpen(false);
       reset();
     },
-    onError: () => toast.error("Failed to add account"),
+    onError: (err: unknown) => {
+      const detail =
+        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data
+          ?.detail ?? (err as { message?: string })?.message;
+      toast.error(detail ? `Failed to add account: ${detail}` : "Failed to add account");
+    },
   });
 
   return (
@@ -201,7 +206,7 @@ export function AccountsPage() {
               <Checkbox
                 id="is_paper"
                 checked={isPaper}
-                onCheckedChange={(v) => setValue("is_paper", v)}
+                onCheckedChange={(v) => setValue("is_paper", v === true)}
               />
               <Label htmlFor="is_paper" className="cursor-pointer">
                 Paper trading (sandboxed)
