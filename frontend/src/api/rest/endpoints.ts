@@ -303,6 +303,27 @@ function labelForBroker(broker: BrokerAccount["broker"]): string {
     .join(" ");
 }
 
+export async function updateAccount(
+  accountId: string,
+  input: {
+    broker?: BrokerAccount["broker"];
+    display_name?: string;
+    api_key?: string;
+    api_secret?: string;
+    is_paper?: boolean;
+  },
+): Promise<BrokerAccount> {
+  const payload = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== ""),
+  );
+  const { data } = await rest.patch<BrokerAccount>(`${BASE}/accounts/${accountId}`, payload);
+  return data;
+}
+
+export async function deleteAccount(accountId: string): Promise<void> {
+  await rest.delete(`${BASE}/accounts/${accountId}`);
+}
+
 // ---------- Analytics ----------
 export async function getAnalyticsSummary(accountId: string): Promise<AnalyticsSummary> {
   const { data } = await rest.get<AnalyticsSummary>(`${BASE}/analytics/summary`, {

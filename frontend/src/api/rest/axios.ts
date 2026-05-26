@@ -10,7 +10,12 @@ import axios, { AxiosError, type AxiosInstance, type InternalAxiosRequestConfig 
  * Token plumbing is deliberately kept here so feature modules never touch tokens.
  */
 
-const baseURL = import.meta.env.VITE_REST_URL ?? "/api";
+const configuredBaseURL = import.meta.env.VITE_REST_URL?.replace(/\/$/, "");
+const baseURL = configuredBaseURL
+  ? configuredBaseURL.endsWith("/api")
+    ? configuredBaseURL
+    : `${configuredBaseURL}/api`
+  : "/api";
 
 export const rest: AxiosInstance = axios.create({
   baseURL,

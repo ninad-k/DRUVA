@@ -13,9 +13,9 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,9 +25,21 @@ from app.config import get_settings
 from app.core.auth.dependencies import get_current_user
 from app.core.errors import BrokerError
 from app.db.models.account import Account
+from app.db.models.approval import ApprovalRequest
 from app.db.models.common import Exchange, ProductType
+from app.db.models.goal import InvestmentGoal, SipExecution, SipSchedule
+from app.db.models.market_data import OrderEvent, PnlSnapshot
+from app.db.models.notification import RiskAlert
+from app.db.models.order import Order
+from app.db.models.portfolio import PortfolioSnapshot, RebalancePlan
 from app.db.models.position import Position
+from app.db.models.report import Report
+from app.db.models.scanner import ScanResult, ScannerConfig
+from app.db.models.strategy import Strategy
+from app.db.models.trade import Trade
 from app.db.models.user import User
+from app.db.models.watchlist import Watchlist, WatchlistItem
+from app.db.models.webhook import WebhookEvent, WebhookSource
 from app.db.session import get_session
 from app.infrastructure.encryption import encrypt
 from app.infrastructure.logging import get_logger
@@ -57,6 +69,14 @@ class AccountCreate(BaseModel):
     api_key: str = Field(..., min_length=1)
     api_secret: str = Field(..., min_length=1)
     is_paper: bool = True
+
+
+class AccountUpdate(BaseModel):
+    broker: BrokerId | None = None
+    display_name: str | None = None
+    api_key: str | None = Field(default=None, min_length=1)
+    api_secret: str | None = Field(default=None, min_length=1)
+    is_paper: bool | None = None
 
 
 def _label_for_broker(broker: str) -> str:
@@ -145,6 +165,101 @@ async def create_account(
     await session.commit()
     await session.refresh(account)
     return _to_dict(account)
+
+
+@router.patch("/{account_id}")
+async def update_account(
+    account_id: UUID,
+    payload: AccountUpdate,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    account = await session.get(Account, account_id)
+    if account is None or account.user_id != user.id:
+        raise HTTPException(status_code=404, detail="account_not_found")
+
+    settings = get_settings()
+    if payload.broker is not None:
+        account.broker_id = payload.broker
+    if payload.display_name is not None:
+        account.account_ref = payload.display_name.strip() or _label_for_broker(account.broker_id)
+    if payload.api_key is not None:
+        key_ct, key_nonce = _encrypt_or_400(payload.api_key, settings.master_key)
+        account.api_key_encrypted = key_ct
+        account.api_key_nonce = key_nonce
+    if payload.api_secret is not None:
+        secret_ct, secret_nonce = _encrypt_or_400(payload.api_secret, settings.master_key)
+        account.api_secret_encrypted = secret_ct
+        account.api_secret_nonce = secret_nonce
+    if payload.is_paper is not None:
+        account.is_paper = payload.is_paper
+        if payload.is_paper and account.cash_balance <= 0:
+            account.cash_balance = account.paper_starting_capital
+
+    account.is_active = True
+    account.health_disabled_at = None
+    await session.commit()
+    await session.refresh(account)
+    return _to_dict(account)
+
+
+@router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    account_id: UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    account = await session.get(Account, account_id)
+    if account is None or account.user_id != user.id:
+        raise HTTPException(status_code=404, detail="account_not_found")
+
+    await _delete_account_dependents(session, account.id)
+    await session.delete(account)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _delete_account_dependents(session: AsyncSession, account_id: UUID) -> None:
+    scanner_ids = (
+        await session.execute(select(ScannerConfig.id).where(ScannerConfig.account_id == account_id))
+    ).scalars().all()
+    watchlist_ids = (
+        await session.execute(select(Watchlist.id).where(Watchlist.account_id == account_id))
+    ).scalars().all()
+    webhook_source_ids = (
+        await session.execute(select(WebhookSource.id).where(WebhookSource.account_id == account_id))
+    ).scalars().all()
+    goal_ids = (
+        await session.execute(select(InvestmentGoal.id).where(InvestmentGoal.account_id == account_id))
+    ).scalars().all()
+
+    if scanner_ids:
+        await session.execute(delete(ScanResult).where(ScanResult.scanner_id.in_(scanner_ids)))
+    if watchlist_ids:
+        await session.execute(delete(WatchlistItem).where(WatchlistItem.watchlist_id.in_(watchlist_ids)))
+    if webhook_source_ids:
+        await session.execute(delete(WebhookEvent).where(WebhookEvent.source_id.in_(webhook_source_ids)))
+    if goal_ids:
+        await session.execute(delete(SipExecution).where(SipExecution.goal_id.in_(goal_ids)))
+        await session.execute(delete(SipSchedule).where(SipSchedule.goal_id.in_(goal_ids)))
+
+    await session.execute(delete(OrderEvent).where(OrderEvent.order_id.in_(select(Order.id).where(Order.account_id == account_id))))
+    await session.execute(delete(Trade).where(Trade.account_id == account_id))
+    await session.execute(delete(ApprovalRequest).where(ApprovalRequest.account_id == account_id))
+    await session.execute(delete(ScanResult).where(ScanResult.promoted_order_id.in_(select(Order.id).where(Order.account_id == account_id))))
+    await session.execute(delete(PnlSnapshot).where(PnlSnapshot.account_id == account_id))
+    await session.execute(delete(RiskAlert).where(RiskAlert.account_id == account_id))
+    await session.execute(delete(PortfolioSnapshot).where(PortfolioSnapshot.account_id == account_id))
+    await session.execute(delete(RebalancePlan).where(RebalancePlan.account_id == account_id))
+    await session.execute(delete(Position).where(Position.account_id == account_id))
+    await session.execute(delete(Order).where(Order.account_id == account_id))
+    await session.execute(delete(WebhookSource).where(WebhookSource.account_id == account_id))
+    await session.execute(delete(Watchlist).where(Watchlist.account_id == account_id))
+    await session.execute(delete(ScannerConfig).where(ScannerConfig.account_id == account_id))
+    await session.execute(delete(SipSchedule).where(SipSchedule.strategy_id.in_(select(Strategy.id).where(Strategy.account_id == account_id))))
+    await session.execute(delete(InvestmentGoal).where(InvestmentGoal.account_id == account_id))
+    await session.execute(delete(Report).where(Report.account_id == account_id))
+    await session.execute(delete(Strategy).where(Strategy.account_id == account_id))
 
 
 @router.post("/{account_id}/sync")
