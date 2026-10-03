@@ -5,9 +5,8 @@ Reference: https://upstox.com/developer/api-documentation/
 Best-effort REST mappings against the public v2 documentation. Endpoint
 shapes, field names, and product/exchange codes have been verified against
 the docs but should be re-tested against the broker sandbox before being
-used to place real money. Methods that are not yet implemented raise
-``NotImplementedError`` with a TODO so the call site fails loudly rather
-than silently.
+used to place real money. ``search_symbols`` is intentionally unsupported
+(it raises ``BrokerError``; resolve symbols from the synced instrument master).
 """
 
 from __future__ import annotations
@@ -18,7 +17,12 @@ from decimal import Decimal
 
 import httpx
 
-from app.brokers._rest_helpers import health_probe, safe_json
+from app.brokers._rest_helpers import (
+    epoch_ms_to_ist_date,
+    health_probe,
+    iter_json_array,
+    safe_json,
+)
 from app.brokers.base import (
     AuthSession,
     BrokerAdapter,
@@ -43,12 +47,75 @@ from app.strategies.base import Candle
 from app.utils.time import utcnow
 
 
+INSTRUMENT_URLS: tuple[str, ...] = (
+    "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz",
+    "https://assets.upstox.com/market-quote/instruments/exchange/BSE.json.gz",
+)
+
+_SEGMENT_TO_EXCHANGE = {
+    "NSE_EQ": "NSE",
+    "BSE_EQ": "BSE",
+    "NSE_INDEX": "NSE",
+    "BSE_INDEX": "BSE",
+    "NSE_FO": "NFO",
+    "BSE_FO": "BFO",
+    "NCD_FO": "CDS",
+    "BCD_FO": "BCD",
+    "MCX_FO": "MCX",
+}
+
+
+def _upstox_instrument(item: dict) -> InstrumentRecord | None:
+    key = item.get("instrument_key")
+    segment = item.get("segment", "")
+    trading_symbol = item.get("trading_symbol") or item.get("tradingsymbol") or ""
+    exchange = _SEGMENT_TO_EXCHANGE.get(segment)
+    if not key or not trading_symbol or exchange is None:
+        return None
+    strike_raw = item.get("strike_price")
+    # Upstox publishes tick_size in paise (5.0 == Rs 0.05).
+    try:
+        tick = Decimal(str(item.get("tick_size") or 0)) / Decimal(100)
+    except ArithmeticError:
+        tick = Decimal(0)
+    if tick <= 0:
+        tick = Decimal("0.05")
+    try:
+        lot_size = int(item.get("lot_size") or 1)
+    except (TypeError, ValueError):
+        lot_size = 1
+    return InstrumentRecord(
+        symbol=trading_symbol,
+        exchange=exchange,
+        broker_token=str(key),
+        instrument_type=str(item.get("instrument_type") or "EQ"),
+        trading_symbol=trading_symbol,
+        lot_size=max(lot_size, 1),
+        tick_size=tick,
+        expiry=epoch_ms_to_ist_date(item.get("expiry")),
+        strike=Decimal(str(strike_raw)) if strike_raw not in (None, "", 0, 0.0) else None,
+        isin=item.get("isin") or None,
+        exchange_token=str(item["exchange_token"]) if item.get("exchange_token") else None,
+        extra={
+            k: item[k]
+            for k in ("name", "segment", "underlying_symbol", "underlying_key", "freeze_quantity")
+            if item.get(k) not in (None, "")
+        },
+    )
+
+
 class UpstoxAdapter(BrokerAdapter):
     broker_id = "upstox"
 
-    def __init__(self, http: httpx.AsyncClient, base_url: str = "https://api.upstox.com/v2"):
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        base_url: str = "https://api.upstox.com/v2",
+        instrument_urls: tuple[str, ...] = INSTRUMENT_URLS,
+    ):
         self._http = http
         self._base_url = base_url
+        self._instrument_urls = instrument_urls
         self._access_token: str | None = None
 
     # ---- Auth -------------------------------------------------------------
@@ -205,7 +272,6 @@ class UpstoxAdapter(BrokerAdapter):
                 DepthLevel(
                     price=Decimal(str(lvl.get("price", 0))),
                     quantity=Decimal(str(lvl.get("quantity", 0))),
-                    orders=int(lvl.get("orders", 0)),
                 )
                 for lvl in (side or [])[:5]
             ]
@@ -303,19 +369,11 @@ class UpstoxAdapter(BrokerAdapter):
         return await health_probe(self._http, f"{self._base_url}/user/profile", self._headers())
 
     async def download_master_contract(self) -> AsyncIterator[InstrumentRecord]:
-        # Upstox publishes a daily gzipped JSON dump. Real implementation:
-        # stream + gunzip + ijson. The stub yields nothing so the sync job
-        # logs 0 records and the operator can wire the real download URL
-        # when going live.
-        if False:
-            yield InstrumentRecord(
-                symbol="",
-                exchange="NSE",
-                broker_token="",
-                instrument_type="EQ",
-                trading_symbol="",
-            )
-        return
+        for url in self._instrument_urls:
+            async for item in iter_json_array(self._http, url, self.broker_id, "instruments"):
+                record = _upstox_instrument(item)
+                if record is not None:
+                    yield record
 
     # ---- Internals --------------------------------------------------------
 

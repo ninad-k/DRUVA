@@ -208,7 +208,6 @@ class FyersAdapter(BrokerAdapter):
                 DepthLevel(
                     price=Decimal(str(lvl.get("price", 0))),
                     quantity=Decimal(str(lvl.get("volume", 0))),
-                    orders=int(lvl.get("ord", 0)),
                 )
                 for lvl in (side or [])[:5]
             ]

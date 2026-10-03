@@ -10,12 +10,12 @@ the Dhan sandbox before live use.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import httpx
 
-from app.brokers._rest_helpers import health_probe, safe_json
+from app.brokers._rest_helpers import health_probe, iter_csv_rows, safe_json
 from app.brokers.base import (
     AuthSession,
     BrokerAdapter,
@@ -40,12 +40,100 @@ from app.strategies.base import Candle
 from app.utils.time import utcnow
 
 
+INSTRUMENT_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
+
+_DHAN_EXCHANGE = {
+    ("NSE", "E"): "NSE",
+    ("BSE", "E"): "BSE",
+    ("NSE", "I"): "NSE",
+    ("BSE", "I"): "BSE",
+    ("NSE", "D"): "NFO",
+    ("BSE", "D"): "BFO",
+    ("NSE", "C"): "CDS",
+    ("BSE", "C"): "BCD",
+    ("MCX", "M"): "MCX",
+}
+
+
+def _dhan_instrument(row: dict[str, str]) -> InstrumentRecord | None:
+    segment = row.get("SEM_SEGMENT", "")
+    security_id = row.get("SEM_SMST_SECURITY_ID", "")
+    trading_symbol = row.get("SEM_TRADING_SYMBOL", "")
+    exchange = _DHAN_EXCHANGE.get((row.get("SEM_EXM_EXCH_ID", ""), segment))
+    if not security_id or not trading_symbol or exchange is None:
+        return None
+    name = row.get("SEM_INSTRUMENT_NAME", "")
+    option_type = row.get("SEM_OPTION_TYPE", "")
+    if segment == "I":
+        itype = "INDEX"
+    elif option_type in ("CE", "PE"):
+        itype = option_type
+    elif name.startswith("FUT"):
+        itype = "FUT"
+    else:
+        itype = "EQ"
+    expiry = None
+    raw_expiry = row.get("SEM_EXPIRY_DATE", "")[:10]
+    if raw_expiry and not raw_expiry.startswith("0001"):
+        try:
+            expiry = date.fromisoformat(raw_expiry)
+        except ValueError:
+            expiry = None
+    strike = None
+    try:
+        strike_val = Decimal(row.get("SEM_STRIKE_PRICE") or "0")
+        # Dhan uses 0 / negative sentinels for non-options
+        strike = strike_val if strike_val > 0 and itype in ("CE", "PE") else None
+    except ArithmeticError:
+        strike = None
+    try:
+        lot_size = int(Decimal(row.get("SEM_LOT_UNITS") or "1"))
+    except ArithmeticError:
+        lot_size = 1
+    try:
+        tick = Decimal(row.get("SEM_TICK_SIZE") or "0")
+    except ArithmeticError:
+        tick = Decimal(0)
+    # Dhan reports tick size in paise (5.0000 == Rs 0.05).
+    if tick >= 1:
+        tick = tick / Decimal(100)
+    if tick <= 0:
+        tick = Decimal("0.05")
+    return InstrumentRecord(
+        symbol=trading_symbol,
+        exchange=exchange,
+        broker_token=security_id,
+        instrument_type=itype,
+        trading_symbol=trading_symbol,
+        lot_size=max(lot_size, 1),
+        tick_size=tick,
+        expiry=expiry,
+        strike=strike,
+        isin=row.get("SEM_ISIN") or None,
+        extra={
+            k: v
+            for k, v in (
+                ("name", row.get("SEM_CUSTOM_SYMBOL", "")),
+                ("series", row.get("SEM_SERIES", "")),
+                ("instrument_name", name),
+            )
+            if v
+        },
+    )
+
+
 class DhanAdapter(BrokerAdapter):
     broker_id = "dhan"
 
-    def __init__(self, http: httpx.AsyncClient, base_url: str = "https://api.dhan.co/v2"):
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        base_url: str = "https://api.dhan.co/v2",
+        instrument_url: str = INSTRUMENT_URL,
+    ):
         self._http = http
         self._base_url = base_url
+        self._instrument_url = instrument_url
         self._access_token: str | None = None
         self._client_id: str | None = None
 
@@ -185,7 +273,6 @@ class DhanAdapter(BrokerAdapter):
                 DepthLevel(
                     price=Decimal(str(lvl.get("price", 0))),
                     quantity=Decimal(str(lvl.get("quantity", 0))),
-                    orders=int(lvl.get("orders", 0)),
                 )
                 for lvl in (side or [])[:5]
             ]
@@ -288,17 +375,12 @@ class DhanAdapter(BrokerAdapter):
         return await health_probe(self._http, f"{self._base_url}/profile", self._headers())
 
     async def download_master_contract(self) -> AsyncIterator[InstrumentRecord]:
-        # Dhan publishes a daily CSV. Real implementation needs streaming +
-        # CSV parsing; stub yields nothing so the operator wires the URL.
-        if False:
-            yield InstrumentRecord(
-                symbol="",
-                exchange="NSE",
-                broker_token="",
-                instrument_type="EQ",
-                trading_symbol="",
-            )
-        return
+        async for row in iter_csv_rows(
+            self._http, self._instrument_url, self.broker_id, "instruments"
+        ):
+            record = _dhan_instrument(row)
+            if record is not None:
+                yield record
 
     def _headers(self) -> dict[str, str]:
         if not self._access_token:
