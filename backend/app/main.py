@@ -38,6 +38,7 @@ from app.api.rest.v1 import (
     watchlists,
     webhooks,
     webhooks_extra,
+    webhooks_whatsapp,
 )
 from app.brokers.factory import BrokerFactory
 from app.cache.client import CacheClient
@@ -78,7 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cache = CacheClient(redis)
     notifier = TelegramNotifier(bot_token=settings.telegram_bot_token, http=http)
     email_notifier = get_email_notifier()
+    from app.api.dependencies import build_whatsapp_notifier
+
+    whatsapp_notifier = build_whatsapp_notifier(settings, http)
     app.state.telegram_notifier = notifier
+    app.state.whatsapp_notifier = whatsapp_notifier
     app.state.email_notifier = email_notifier
     app.state.cache = cache
 
@@ -109,6 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         redis_factory=lambda: redis,
         telegram_notifier=notifier,
         email_notifier=email_notifier,
+        whatsapp_notifier=whatsapp_notifier,
     )
     start_scheduler()
 
@@ -134,7 +140,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 settings=settings,
                 notifier=notifier,
             )
-            return ApprovalService(session=session, execution_service=execution)
+            return ApprovalService(
+                session=session,
+                execution_service=execution,
+                whatsapp_notifier=whatsapp_notifier,
+            )
 
         listener = TelegramBotListener(
             bot_token=settings.telegram_bot_token,
@@ -270,6 +280,8 @@ def create_app() -> FastAPI:
     app.include_router(webhooks_extra.router_metatrader, prefix="/api/v1/webhooks/metatrader", tags=["webhooks"])
     app.include_router(webhooks_extra.router_gocharting, prefix="/api/v1/webhooks/gocharting", tags=["webhooks"])
     app.include_router(webhooks_extra.router_n8n, prefix="/api/v1/webhooks/n8n", tags=["webhooks"])
+    app.include_router(webhooks_whatsapp.router, prefix="/api/v1/webhooks/whatsapp", tags=["webhooks"])
+    app.include_router(webhooks_whatsapp.router_link, prefix="/api/v1/notifications/whatsapp", tags=["notifications"])
     app.include_router(webhooks.router_sources, prefix="/api/v1/webhook-sources", tags=["webhooks"])
     app.include_router(webhooks.router_notifications, prefix="/api/v1/notifications", tags=["notifications"])
 

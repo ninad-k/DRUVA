@@ -24,6 +24,7 @@ from app.core.execution.execution_service import ExecutionService
 from app.core.execution.position_tracker import PositionTracker
 from app.core.execution.risk_engine import RiskEngine
 from app.core.notifications.telegram import TelegramNotifier
+from app.core.notifications.whatsapp import WhatsAppNotifier
 from app.db.models.notification import NotificationConfig
 from app.db.models.order import Order
 from app.db.session import get_session
@@ -51,6 +52,31 @@ def get_telegram_notifier(request: Request) -> TelegramNotifier | None:
     return getattr(request.app.state, "telegram_notifier", None)
 
 
+def build_whatsapp_notifier(
+    settings: Settings, http: httpx.AsyncClient
+) -> WhatsAppNotifier | None:
+    """None unless all three Twilio credentials are configured."""
+    if not (
+        settings.twilio_account_sid
+        and settings.twilio_auth_token
+        and settings.twilio_whatsapp_from
+    ):
+        return None
+    return WhatsAppNotifier(
+        account_sid=settings.twilio_account_sid,
+        auth_token=settings.twilio_auth_token,
+        from_number=settings.twilio_whatsapp_from,
+        http=http,
+    )
+
+
+def get_whatsapp_notifier(
+    http: httpx.AsyncClient = Depends(get_http_client),
+    settings: Settings = Depends(get_settings),
+) -> WhatsAppNotifier | None:
+    return build_whatsapp_notifier(settings, http)
+
+
 def get_execution_service(
     session: AsyncSession = Depends(get_session),
     broker_factory: BrokerFactory = Depends(get_broker_factory),
@@ -72,8 +98,13 @@ def get_execution_service(
 def get_approval_service(
     session: AsyncSession = Depends(get_session),
     execution_service: ExecutionService = Depends(get_execution_service),
+    whatsapp_notifier: WhatsAppNotifier | None = Depends(get_whatsapp_notifier),
 ) -> ApprovalService:
-    return ApprovalService(session=session, execution_service=execution_service)
+    return ApprovalService(
+        session=session,
+        execution_service=execution_service,
+        whatsapp_notifier=whatsapp_notifier,
+    )
 
 
 # ----------------------------------------------------------------------------

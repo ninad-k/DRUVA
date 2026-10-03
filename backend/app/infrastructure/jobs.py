@@ -37,6 +37,7 @@ from app.core.execution.execution_service import ExecutionService
 from app.core.execution.position_tracker import PositionTracker
 from app.core.execution.risk_engine import RiskEngine
 from app.core.notifications.telegram import DailySummary, TelegramNotifier
+from app.core.notifications.whatsapp import WhatsAppNotifier
 from app.core.strategy.run_loop import StrategyRunLoop
 from app.data.instruments.sync_service import InstrumentSyncService
 from app.db.models.account import Account
@@ -58,6 +59,7 @@ def register_jobs(
     redis_factory: Callable[[], Redis],
     telegram_notifier: TelegramNotifier,
     email_notifier=None,  # app.core.notifications.email.EmailNotifier | None
+    whatsapp_notifier: WhatsAppNotifier | None = None,
 ) -> None:
     # 1. Broker health monitor — every 60 s.
     async def health_job() -> None:
@@ -115,6 +117,7 @@ def register_jobs(
         cache_factory=cache_factory,
         redis_factory=redis_factory,
         settings=settings,
+        whatsapp_notifier=whatsapp_notifier,
     )
 
     async def strategy_job() -> None:

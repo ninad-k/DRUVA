@@ -27,6 +27,7 @@ from app.core.execution.approval_service import ApprovalService
 from app.core.execution.execution_service import ExecutionService
 from app.core.execution.position_tracker import PositionTracker
 from app.core.execution.risk_engine import RiskEngine
+from app.core.notifications.whatsapp import WhatsAppNotifier
 from app.core.strategy.executor import StrategyExecutor
 from app.data.ohlcv_repository import OhlcvRepository
 from app.db.models.strategy import Strategy
@@ -45,6 +46,7 @@ class StrategyRunLoop:
     cache_factory: Callable[[], CacheClient]
     redis_factory: Callable[[], Redis]
     settings: Settings
+    whatsapp_notifier: WhatsAppNotifier | None = None
 
     async def run_once(self) -> int:
         """Process every enabled strategy once. Returns number dispatched."""
@@ -108,7 +110,11 @@ class StrategyRunLoop:
             ),
             position_tracker=PositionTracker(session=session, cache=cache),
         )
-        approval = ApprovalService(session=session, execution_service=execution)
+        approval = ApprovalService(
+            session=session,
+            execution_service=execution,
+            whatsapp_notifier=self.whatsapp_notifier,
+        )
         return StrategyExecutor(
             session=session,
             execution_service=execution,
