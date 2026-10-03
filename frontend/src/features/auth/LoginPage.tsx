@@ -19,6 +19,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Prefill the seeded dev admin; production builds start with empty fields.
+const DEV_DEFAULTS = import.meta.env.DEV
+  ? { username: "administrator", password: "Admin@123" }
+  : { username: "", password: "" };
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -30,7 +35,7 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: "", password: "" },
+    defaultValues: DEV_DEFAULTS,
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -96,7 +101,6 @@ export function LoginPage() {
               <Input
                 id="username"
                 autoComplete="username"
-                placeholder={DEV_PLACEHOLDERS.username}
                 {...register("username")}
               />
               {errors.username && (
@@ -109,7 +113,6 @@ export function LoginPage() {
                 id="password"
                 type="password"
                 autoComplete="current-password"
-                placeholder={DEV_PLACEHOLDERS.password}
                 {...register("password")}
               />
               {errors.password && (
@@ -132,11 +135,6 @@ export function LoginPage() {
     </div>
   );
 }
-
-// Seeded dev admin hint; production builds show no credentials.
-const DEV_PLACEHOLDERS = import.meta.env.DEV
-  ? { username: "administrator", password: "Admin@123" }
-  : { username: undefined, password: undefined };
 
 function canUseDevAdminFallback(values: FormValues, err: unknown): boolean {
   if (!import.meta.env.DEV) return false;
