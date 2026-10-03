@@ -74,7 +74,10 @@ export function MonteCarloChart({ goalId, targetCorpus }: Props) {
       const res = await fetch(`/api/v1/goals/${goalId}/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          ...params,
+          n_simulations: Math.min(5000, Math.max(100, params.n_simulations || 100)),
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
       setResult(await res.json());

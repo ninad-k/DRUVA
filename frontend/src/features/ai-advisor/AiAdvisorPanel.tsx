@@ -412,8 +412,14 @@ export function AiAdvisorPanel({ accountId }: AiAdvisorPanelProps) {
     try {
       // Refresh sentiment data and compose a message from it
       const [fresh, freshRegime] = await Promise.all([
-        fetch(`${API_BASE}/sentiment`).then((r) => r.json() as Promise<SentimentApiResponse>),
-        fetch(`${API_BASE}/regime-status`).then((r) => r.json() as Promise<RegimeApiResponse>),
+        fetch(`${API_BASE}/sentiment`).then((r) => {
+          if (!r.ok) throw new Error(`sentiment ${r.status}`);
+          return r.json() as Promise<SentimentApiResponse>;
+        }),
+        fetch(`${API_BASE}/regime-status`).then((r) => {
+          if (!r.ok) throw new Error(`regime-status ${r.status}`);
+          return r.json() as Promise<RegimeApiResponse>;
+        }),
       ]);
       setSentiment(fresh);
       setRegime(freshRegime);

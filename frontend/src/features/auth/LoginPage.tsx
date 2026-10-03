@@ -47,9 +47,10 @@ export function LoginPage() {
       toast.success("Welcome back!");
       void navigate({ to: "/dashboard" });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Login failed. Check your credentials.";
+      const response = (err as { response?: { data?: { detail?: string } } })?.response;
+      const msg = response
+        ? (response.data?.detail ?? "Login failed. Check your credentials.")
+        : "Cannot reach the DHRUVA backend. Is it running on port 8000?";
       if (canUseDevAdminFallback(values, err)) {
         setSession(
           {
@@ -61,12 +62,14 @@ export function LoginPage() {
           {
             id: "00000000-0000-0000-0000-000000000001",
             username: "administrator",
-            email: "administrator@dhruva.local",
+            email: "administrator@dhruva.dev",
             display_name: "Administrator",
             created_at: new Date().toISOString(),
           },
         );
-        toast.success("Signed in with local dev credentials.");
+        toast.warning(
+          "Backend unreachable — signed in with an offline dev session. No data will load.",
+        );
         void navigate({ to: "/dashboard" });
         return;
       }
