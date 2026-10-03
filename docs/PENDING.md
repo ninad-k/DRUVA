@@ -18,11 +18,11 @@ Last updated: 2026-05-19
 |----------|---------|-------|
 | `ANTHROPIC_API_KEY` | Claude AI advisor (preferred LLM) | `backend/.env` |
 | `OPENAI_API_KEY` | GPT-4o fallback if no Anthropic key | `backend/.env` |
-| `DRUVA_SMTP_HOST` | Email alerts (order fills, circuit breakers) | `backend/.env` |
-| `DRUVA_SMTP_PORT` | SMTP port (usually 587 TLS or 465 SSL) | `backend/.env` |
-| `DRUVA_SMTP_USER` | SMTP login username | `backend/.env` |
-| `DRUVA_SMTP_PASS` | SMTP login password | `backend/.env` |
-| `DRUVA_SMTP_FROM` | Sender address shown in alerts | `backend/.env` |
+| `DHRUVA_SMTP_HOST` | Email alerts (order fills, circuit breakers) | `backend/.env` |
+| `DHRUVA_SMTP_PORT` | SMTP port (usually 587 TLS or 465 SSL) | `backend/.env` |
+| `DHRUVA_SMTP_USER` | SMTP login username | `backend/.env` |
+| `DHRUVA_SMTP_PASSWORD` | SMTP login password | `backend/.env` |
+| `DHRUVA_SMTP_FROM` | Sender address shown in alerts | `backend/.env` |
 | `regime_trader_enabled` | Activates daily HMM bar job | Settings / `backend/.env` |
 | `rebalance_enabled` | Activates drift-check cron | Settings / `backend/.env` |
 | `regime_alert_chat_id` | Telegram chat for circuit-breaker alerts | Settings / `backend/.env` |

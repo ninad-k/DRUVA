@@ -66,7 +66,7 @@ DEMO_DISPLAY = "Demo Trader"
 
 # A stable master key for demo (32 bytes, base64-encoded).
 # In production, DHRUVA_MASTER_KEY must be a real secret.
-_DEMO_MASTER_KEY_B64: str = base64.b64encode(b"demo-key-NOT-secure-32-bytes-pad!").decode()
+_DEMO_MASTER_KEY_B64: str = base64.b64encode(b"demo-key-NOT-secure-32-bytes-pad").decode()
 
 NIFTY50_WATCHLIST = [
     "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY",

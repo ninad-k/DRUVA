@@ -7,7 +7,8 @@
 # - Logs are prefixed so a single terminal is enough.
 # - Ctrl+C stops both; infra is left running (use `stop.sh --all` to tear down).
 #
-# Usage: bash scripts/run.sh
+# Usage: bash scripts/run.sh [--no-docker]
+#   --no-docker  skip `docker compose` (use scripts/dev-local.sh for Homebrew infra)
 # =============================================================================
 set -euo pipefail
 
@@ -17,8 +18,10 @@ cd "$REPO_ROOT"
 
 banner() { printf "\n\033[1;33m==> %s\033[0m\n" "$1"; }
 
-banner "Ensuring dev infrastructure is up"
-docker compose -f deploy/compose/docker-compose.dev.yml up -d
+if [[ "${1:-}" != "--no-docker" ]]; then
+  banner "Ensuring dev infrastructure is up"
+  docker compose -f deploy/compose/docker-compose.dev.yml up -d
+fi
 
 banner "Starting backend (uvicorn) on :8000 and frontend (vite) on :5173"
 

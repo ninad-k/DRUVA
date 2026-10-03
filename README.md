@@ -8,7 +8,7 @@
 
 ## What it does
 
-- **Multi-broker execution** across Zerodha, Upstox, Dhan, Fyers, 5Paisa (extensible to 23+).
+- **Multi-broker execution** via 11 adapters plus a paper broker (Zerodha, Upstox, Dhan, Fyers, 5Paisa, Angel One, Shoonya, Kotak Neo, Alice Blue, Groww). Upstox/Dhan instrument sync and the Groww adapter are written from the brokers' published docs and have not been exercised against live accounts — test in a sandbox first.
 - **Rule-based + AI/ML strategies** — XGBoost, LSTM, RandomForest baseline, optional RL — all hot-loadable via a plugin contract.
 - **Real-time portfolio analytics** — Sharpe, Sortino, Calmar, max drawdown, VaR, sector exposure.
 - **Per-account and consolidated dashboards** — equity curves, P&L, drawdown, KPIs.
@@ -39,6 +39,30 @@ cd Druva
 pwsh ./scripts/install.ps1
 pwsh ./scripts/run.ps1
 ```
+
+### No Docker? (macOS / Homebrew)
+
+```bash
+bash scripts/install.sh --skip-infra   # python venv + npm deps only
+bash scripts/dev-local.sh              # Postgres 18 + TimescaleDB + Redis via brew, migrate, seed
+bash scripts/run.sh --no-docker        # backend + frontend
+```
+
+`dev-local.sh` is idempotent. The Docker compose stack uses Postgres 16; the
+Homebrew route uses Postgres 18 (what the Timescale formula builds against).
+
+### First login
+
+The seed step creates two accounts:
+
+| Username | Password | What |
+|---|---|---|
+| `administrator` | `Admin@123` | admin, empty — add a broker account in Settings |
+| `demo` | `DhruvaDemo123!` | paper account with positions, orders, strategies, goals |
+
+Change both before exposing the app anywhere. With `DHRUVA_ENV` set to
+`staging`/`production` the backend refuses to start on a default JWT secret,
+a missing `DHRUVA_MASTER_KEY`, or `DHRUVA_DEBUG=true`.
 
 Then open:
 
@@ -84,7 +108,7 @@ Druva/
 │       ├── main.py · config.py
 │       ├── api/      rest/v1, grpc/servicers, websocket
 │       ├── core/     auth, execution, portfolio, strategy, scanner, reports, notifications, audit
-│       ├── brokers/  zerodha, upstox, dhan, fyers, five_paisa
+│       ├── brokers/  zerodha, upstox, dhan, fyers, five_paisa, angel_one, shoonya, kotak_neo, alice_blue, groww, paper
 │       ├── data/     market data pipeline, indicators (Numba)
 │       ├── strategies/
 │       │   ├── base.py · registry.py

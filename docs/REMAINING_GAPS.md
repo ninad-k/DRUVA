@@ -1,6 +1,6 @@
 # DRUVA — Remaining Implementation Gaps
 
-These three items are the only unfinished work in the codebase.
+**Status:** all three gaps below are implemented. Kept for reference.
 Each section is a self-contained prompt you can hand directly to an LLM.
 
 ---

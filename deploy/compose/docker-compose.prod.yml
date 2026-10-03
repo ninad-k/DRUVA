@@ -2,6 +2,8 @@
 # DHRUVA — Production-style full stack (local prod rehearsal)
 # Uses prebuilt images for backend + frontend plus the same infra.
 # Launch: docker compose --env-file .env -f deploy/compose/docker-compose.prod.yml up -d
+# Requires POSTGRES_PASSWORD and GRAFANA_PASSWORD in .env; backend/.env must hold real secrets
+# (the backend refuses to start in production on default JWT/master-key values).
 # =============================================================================
 
 name: dhruva-prod
@@ -43,9 +45,13 @@ services:
     env_file: ../../backend/.env
     environment:
       DHRUVA_ENV: production
+      DHRUVA_DEBUG: "false"
       DHRUVA_DB_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dhruva}
       DHRUVA_REDIS_URL: redis://redis:6379/0
       DHRUVA_OTLP_ENDPOINT: http://jaeger:4317
+    ports:
+      - "8000:8000"    # REST
+      - "50051:50051"  # native gRPC
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
@@ -55,8 +61,32 @@ services:
     image: envoyproxy/envoy:v1.32-latest
     restart: unless-stopped
     volumes:
-      - ../docker/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ../docker/envoy.prod.yaml:/etc/envoy/envoy.yaml:ro
     depends_on: [backend]
+    networks: [dhruva-net]
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    restart: unless-stopped
+    volumes:
+      - ../docker/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports: ["9090:9090"]
+    depends_on: [backend]
+    networks: [dhruva-net]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
     networks: [dhruva-net]
 
   frontend:
@@ -72,6 +102,8 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   dhruva-net:
