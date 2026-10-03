@@ -93,7 +93,12 @@ export function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" autoComplete="username" {...register("username")} />
+              <Input
+                id="username"
+                autoComplete="username"
+                placeholder={DEV_PLACEHOLDERS.username}
+                {...register("username")}
+              />
               {errors.username && (
                 <p className="text-xs text-[hsl(var(--loss))]">{errors.username.message}</p>
               )}
@@ -104,6 +109,7 @@ export function LoginPage() {
                 id="password"
                 type="password"
                 autoComplete="current-password"
+                placeholder={DEV_PLACEHOLDERS.password}
                 {...register("password")}
               />
               {errors.password && (
@@ -126,6 +132,11 @@ export function LoginPage() {
     </div>
   );
 }
+
+// Seeded dev admin hint; production builds show no credentials.
+const DEV_PLACEHOLDERS = import.meta.env.DEV
+  ? { username: "administrator", password: "Admin@123" }
+  : { username: undefined, password: undefined };
 
 function canUseDevAdminFallback(values: FormValues, err: unknown): boolean {
   if (!import.meta.env.DEV) return false;
