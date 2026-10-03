@@ -9,8 +9,11 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_WEAK_JWT_SECRETS = frozenset({"", "change-me", "changeme", "secret"})
 
 
 class Settings(BaseSettings):
@@ -41,6 +44,24 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:4173"]
     )
+
+    @model_validator(mode="after")
+    def _reject_insecure_defaults_outside_dev(self) -> "Settings":
+        """Fail fast instead of booting staging/production with dev secrets."""
+        if self.env == "development":
+            return self
+        problems: list[str] = []
+        if self.jwt_secret in _WEAK_JWT_SECRETS or len(self.jwt_secret) < 32:
+            problems.append("DHRUVA_JWT_SECRET must be a random string of at least 32 characters")
+        if not self.master_key:
+            problems.append("DHRUVA_MASTER_KEY must be set (base64-encoded 32 bytes)")
+        if self.debug:
+            problems.append("DHRUVA_DEBUG must be false")
+        if problems:
+            raise ValueError(
+                f"Insecure configuration for DHRUVA_ENV={self.env}: " + "; ".join(problems)
+            )
+        return self
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -85,6 +106,11 @@ class Settings(BaseSettings):
 
     # --- Execution / approvals ---------------------------------------------
     approval_ttl_minutes: int = 15
+
+    # --- Twilio WhatsApp (optional approval channel) -------------------------
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_from: str = ""  # e.g. "whatsapp:+14155238886"
 
     # --- AI Advisor --------------------------------------------------------
     # Pluggable LLM backend. Default uses a local Ollama server so users can
