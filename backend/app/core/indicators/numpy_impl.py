@@ -130,15 +130,36 @@ def vwap(
     low: Sequence[float],
     close: Sequence[float],
     volume: Sequence[float],
+    session_ids: Sequence[object] | None = None,
 ) -> IndicatorResult:
-    """Cumulative VWAP (daily reset not implemented — cumulative from bar 0)."""
+    """VWAP, cumulative from bar 0 unless ``session_ids`` is given.
+
+    ``session_ids`` holds one label per bar (e.g. the trading date); the running
+    sums restart whenever the label changes, giving the usual daily-reset VWAP.
+    """
     h = _arr(high)
     l = _arr(low)
     c = _arr(close)
     v = _arr(volume)
     tp = (h + l + c) / 3
-    cum_vol = np.cumsum(v)
-    cum_tp_vol = np.cumsum(tp * v)
+    if session_ids is None:
+        cum_vol = np.cumsum(v)
+        cum_tp_vol = np.cumsum(tp * v)
+    else:
+        if len(session_ids) != len(c):
+            raise ValueError("session_ids must have one entry per bar")
+        cum_vol = np.empty_like(v)
+        cum_tp_vol = np.empty_like(v)
+        run_vol = run_tp_vol = 0.0
+        prev = object()
+        for i, sid in enumerate(session_ids):
+            if sid != prev:
+                run_vol = run_tp_vol = 0.0
+                prev = sid
+            run_vol += v[i]
+            run_tp_vol += tp[i] * v[i]
+            cum_vol[i] = run_vol
+            cum_tp_vol[i] = run_tp_vol
     with np.errstate(divide="ignore", invalid="ignore"):
         out = np.where(cum_vol > 0, cum_tp_vol / cum_vol, np.nan)
     return IndicatorResult(

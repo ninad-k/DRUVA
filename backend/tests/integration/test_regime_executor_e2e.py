@@ -18,6 +18,7 @@ Coverage:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -56,7 +57,7 @@ def _make_ohlcv(n: int = 300, regime_vol: float = 0.01) -> pd.DataFrame:
 def _bull_prediction(persistence: int = 5) -> Prediction:
     return Prediction(
         signal="BUY",
-        confidence=0.85,
+        probability=0.85,
         meta={
             "regime_name": "Bull",
             "regime_id": 3,
@@ -72,7 +73,7 @@ def _bull_prediction(persistence: int = 5) -> Prediction:
 def _bear_prediction(persistence: int = 1) -> Prediction:
     return Prediction(
         signal="SELL",
-        confidence=0.72,
+        probability=0.72,
         meta={
             "regime_name": "Bear",
             "regime_id": 1,
@@ -88,7 +89,7 @@ def _bear_prediction(persistence: int = 1) -> Prediction:
 def _crash_prediction(persistence: int = 4) -> Prediction:
     return Prediction(
         signal="SELL",
-        confidence=0.90,
+        probability=0.90,
         meta={
             "regime_name": "Crash",
             "regime_id": 0,
@@ -101,8 +102,8 @@ def _crash_prediction(persistence: int = 4) -> Prediction:
     )
 
 
-def _vix(value: float, source: str = "nse") -> VixReading:
-    return VixReading(value=value, source=source)
+def _vix(value: float) -> VixReading:
+    return VixReading(value=value, change_pct=0.0, fetched_at=datetime.now(timezone.utc))
 
 
 def _mock_position(symbol: str = "NIFTYBEES", qty: int = 10) -> MagicMock:
@@ -123,12 +124,15 @@ def _make_executor(
     strategy: RegimeTraderStrategy | None = None,
 ) -> RegimeExecutor:
     acc = account_id or str(uuid.uuid4())
-    exec_svc = execution_service or AsyncMock()
-    exec_svc.list_positions = AsyncMock(return_value=[])
-    exec_svc.smart_order = AsyncMock(
-        return_value=MagicMock(id=uuid.uuid4(), status="pending")
-    )
-    exec_svc.close_position = AsyncMock()
+    if execution_service is None:
+        exec_svc = AsyncMock()
+        exec_svc.list_positions = AsyncMock(return_value=[])
+        exec_svc.smart_order = AsyncMock(
+            return_value=MagicMock(id=uuid.uuid4(), status="pending")
+        )
+        exec_svc.close_position = AsyncMock()
+    else:
+        exec_svc = execution_service
 
     tg = telegram_notifier or AsyncMock()
     tg.send_text = AsyncMock()

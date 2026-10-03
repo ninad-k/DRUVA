@@ -129,7 +129,7 @@ class RegimeExecutor:
             signal in ("BUY", "SELL")
             and persistence >= 3
             and not meta.get("flicker_warning", False)
-            and cb_state.status == "normal"
+            and cb_state.status in ("normal", "half_cut")
         )
 
         if cb_state.status == "full_close":
