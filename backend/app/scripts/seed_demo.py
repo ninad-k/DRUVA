@@ -10,7 +10,7 @@ and never deletes existing data.
 
 Demo credentials
 ----------------
-  Email:    demo@dhruva.local
+  Email:    demo@dhruva.dev
   Password: DhruvaDemo123!
   Role:     (standard user; admin login uses the DEV_ADMIN_* env vars)
 """
@@ -59,7 +59,7 @@ logger = get_logger(__name__)
 # Demo constants
 # ---------------------------------------------------------------------------
 
-DEMO_EMAIL = "demo@dhruva.local"
+DEMO_EMAIL = "demo@dhruva.dev"
 DEMO_PASSWORD = "DhruvaDemo123!"
 DEMO_USERNAME = "demo"
 DEMO_DISPLAY = "Demo Trader"

@@ -17,14 +17,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "accounts",
-        sa.Column("cash_balance", sa.Numeric(20, 4), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "accounts",
-        sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
-    )
+    # 0001 builds the schema from the current models, so on a fresh database
+    # these columns already exist.
+    existing = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("accounts")}
+    if "cash_balance" not in existing:
+        op.add_column(
+            "accounts",
+            sa.Column("cash_balance", sa.Numeric(20, 4), nullable=False, server_default="0"),
+        )
+    if "last_synced_at" not in existing:
+        op.add_column(
+            "accounts",
+            sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
+        )
     # Seed paper accounts so the dashboard isn't ₹0 the instant this lands; live
     # accounts stay at 0 until the next broker sync writes a real number.
     op.execute(

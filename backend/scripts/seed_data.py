@@ -18,7 +18,7 @@ from app.db.session import SessionLocal
 
 ADMIN_USERNAME = os.getenv("DHRUVA_SEED_ADMIN_USERNAME", "administrator")
 ADMIN_PASSWORD = os.getenv("DHRUVA_SEED_ADMIN_PASSWORD", "Admin@123")
-ADMIN_EMAIL = os.getenv("DHRUVA_SEED_ADMIN_EMAIL", "administrator@dhruva.local")
+ADMIN_EMAIL = os.getenv("DHRUVA_SEED_ADMIN_EMAIL", "administrator@dhruva.dev")
 ADMIN_DISPLAY_NAME = os.getenv("DHRUVA_SEED_ADMIN_DISPLAY_NAME", "Administrator")
 
 

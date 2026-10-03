@@ -17,8 +17,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("username", sa.String(length=64), nullable=True))
-    op.create_index("ix_users_username", "users", ["username"], unique=True)
+    # 0001 builds the schema from the current models, so on a fresh database the
+    # column and index already exist.
+    inspector = sa.inspect(op.get_bind())
+    if "username" not in {c["name"] for c in inspector.get_columns("users")}:
+        op.add_column("users", sa.Column("username", sa.String(length=64), nullable=True))
+    if "ix_users_username" not in {i["name"] for i in inspector.get_indexes("users")}:
+        op.create_index("ix_users_username", "users", ["username"], unique=True)
 
 
 def downgrade() -> None:
